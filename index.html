@@ -1,0 +1,1889 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta name="robots" content="noindex, nofollow">
+<script>
+/* Read-only snapshot shim: maps /api/* calls to static JSON under ./data/ (relative to the page). */
+(function () {
+  const BASE = new URL("data/", document.baseURI).href;
+  const realFetch = window.fetch.bind(window);
+  const cache = new Map();
+  const getJSON = (p) => {
+    if (!cache.has(p)) cache.set(p, realFetch(BASE + p).then((r) => { if (!r.ok) throw new Error(r.status + " " + p); return r.json(); }));
+    return cache.get(p);
+  };
+  async function resolve(o) {
+    if (Array.isArray(o)) return Promise.all(o.map(resolve));
+    if (o && typeof o === "object") {
+      if (typeof o.$ref === "string") {
+        const v = await resolve(await getJSON("obj/" + o.$ref + ".json"));
+        return o.$x ? Object.assign({}, v, o.$x) : v;
+      }
+      const out = {};
+      await Promise.all(Object.keys(o).map(async (k) => { out[k] = await resolve(o[k]); }));
+      return out;
+    }
+    return o;
+  }
+  const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+  let members = null;
+  async function route(u) {
+    const p = u.pathname, q = u.searchParams;
+    if (p === "/api/meta") return json(await getJSON("meta.json"));
+    if (p === "/api/rankings") return json(await getJSON("rankings.json"));
+    if (p === "/api/members") {
+      members = members || (await getJSON("members.json")).members;
+      const text = (q.get("q") || "").trim().toLowerCase(), ch = (q.get("chamber") || "").trim().toLowerCase(),
+        pa = (q.get("party") || "").trim().toLowerCase(), st = (q.get("state") || "").trim().toUpperCase();
+      const m = members.filter((x) => (!ch || x.chamber === ch) && (!st || x.state === st) &&
+        (!pa || pa === String(x.party).toLowerCase() || pa === String(x.party_code).toLowerCase()) &&
+        (!text || [x.name, x.bioguide, x.state, x.party, x.seat, x.chamber].join(" ").toLowerCase().includes(text)));
+      return json({ count: m.length, members: m });
+    }
+    let mm;
+    if ((mm = p.match(/^\/api\/zip\/(.*)$/))) {
+      const raw = decodeURIComponent(mm[1]).replace(/\/+$/, "").trim();
+      const z = (raw.match(/^(\d{5})(-\d{4})?$/) || [])[1];
+      if (!z) return json({ ok: false, error: "Enter a 5-digit US ZIP code." }, 400);
+      let shard; try { shard = await getJSON("zip/" + z.slice(0, 3) + ".json"); } catch (e) { shard = {}; }
+      if (shard[z]) return json(await resolve(shard[z]));
+      const miss = Object.assign({}, await getJSON("zip_missing.json"), { zip: z });
+      miss.reason = String(miss.reason).replace("00000", z);
+      return json(miss);
+    }
+    if ((mm = p.match(/^\/api\/bills\/([^/]+)\/who\/?$/))) {
+      const key = decodeURIComponent(mm[1]).toLowerCase();
+      let d; try { d = await resolve(await getJSON("who/" + key + ".json")); } catch (e) { return json({ error: "Not in this snapshot." }, 404); }
+      const ov = d.$overlap || {}; delete d.$overlap;
+      const b = q.get("bioguide") || "";
+      if (ov[b]) d.donor_overlap = ov[b];
+      return json(d);
+    }
+    if ((mm = p.match(/^\/api\/members\/([^/]+)(\/stands-for)?\/?$/))) {
+      const id = decodeURIComponent(mm[1]);
+      let d; try { d = await resolve(await getJSON("member/" + id + ".json")); } catch (e) { return json({ error: "No current member with that bioguide id." }, 404); }
+      return mm[2] ? json({ bioguide: id, stands_for: d.stands_for }) : json(d);
+    }
+    return json({ error: "Not available in the read-only snapshot." }, 404);
+  }
+  window.fetch = function (input, init) {
+    const s = typeof input === "string" ? input : input.url;
+    if (s.startsWith("/api/")) return route(new URL(s, "http://snapshot.local"));
+    return realFetch(input, init);
+  };
+})();
+</script>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home Delegation</title>
+<style>
+  :root {
+    --paper: #e8e2d6;
+    --sheet: #f7f4ee;
+    --ink: #1b1a17;
+    --muted: #5f5a52;
+    --line: #d4cdc0;
+    --pine: #1c2824;
+    --pine-2: #2c4038;
+    --rust: #8d3d2f;
+    --card: #fffdf9;
+    --focus: #1f4d3f;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    color: var(--ink);
+    background: var(--paper);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.45;
+  }
+  button, input, select { font: inherit; color: inherit; }
+  a { color: var(--focus); }
+  a:hover { color: var(--rust); }
+  .mast {
+    background: var(--pine);
+    color: #f3efe6;
+    padding: 18px 28px 16px;
+    border-bottom: 4px solid var(--rust);
+  }
+  .mast-inner {
+    max-width: 1180px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: flex-end;
+  }
+  .kicker {
+    margin: 0 0 4px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-size: 11px;
+    color: #c8bfae;
+  }
+  h1 {
+    margin: 0;
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", Palatino, serif;
+    font-weight: 500;
+    font-size: 32px;
+    letter-spacing: -0.02em;
+  }
+  .nav { display: flex; gap: 14px; padding-bottom: 4px; }
+  .nav a { color: #f3efe6; text-decoration: none; border-bottom: 1px solid transparent; }
+  .nav a:hover, .nav a[aria-current="page"] { border-bottom-color: #e0b2a8; color: white; }
+  .scope, .wrap { max-width: 1180px; margin: 0 auto; padding: 16px 28px 0; }
+  .scope p, .callout {
+    margin: 0;
+    padding: 12px 14px;
+    background: #f3ecdf;
+    border: 1px solid #e0d3bc;
+    border-left: 4px solid var(--rust);
+    color: #3a342c;
+  }
+  .home {
+    max-width: 720px;
+    margin: 28px auto 48px;
+    padding: 0 28px;
+  }
+  .home h2, .dash-head h2, .detail h2, .detail-empty h2 {
+    font-family: Georgia, "Iowan Old Style", Palatino, serif;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+  }
+  .home h2 { font-size: 34px; margin: 0 0 10px; }
+  .zip-form { display: flex; gap: 8px; margin-top: 16px; }
+  .zip-form input {
+    flex: 1;
+    background: white;
+    border: 1px solid #cfc6b8;
+    border-radius: 2px;
+    padding: 12px 14px;
+    font-size: 20px;
+    letter-spacing: 0.04em;
+  }
+  button.primary, a.primary {
+    background: var(--pine);
+    color: #f3efe6;
+    border: 0;
+    border-radius: 2px;
+    padding: 12px 16px;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+  }
+  button.primary:hover, a.primary:hover { background: var(--pine-2); color: white; }
+  input:focus, select:focus, button:focus-visible, a:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+  .wrap { padding-bottom: 28px; }
+  .dash-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-end; margin: 8px 0 12px; }
+  .dash-head h2 { margin: 0; font-size: 30px; }
+  .section-label {
+    margin: 22px 0 8px;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+  .card, .panel {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 2px;
+  }
+  .card { padding: 16px; }
+  .who { display: grid; grid-template-columns: 92px 1fr; gap: 14px; align-items: start; }
+  .who img, .monogram, .who .monogram.lg {
+    width: 92px;
+    height: 112px;
+    object-fit: cover;
+    background: #ddd6c8;
+    border: 1px solid var(--line);
+    display: block;
+  }
+  .monogram, .who .monogram.lg { display: grid; place-items: center; color: var(--pine); font-size: 22px; }
+  .card h3, .who h2 {
+    margin: 0 0 4px;
+    font-family: Georgia, Palatino, serif;
+    font-weight: 500;
+    font-size: 26px;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+  }
+  .meta { color: var(--muted); font-size: 14px; }
+  .party { font-weight: 650; }
+  .party-D { color: #1d4e89; }
+  .party-R { color: #8e2e2e; }
+  .party-I { color: #5c5346; }
+  .next-up { margin: 12px 0 4px; font-size: 17px; }
+  .rule, .fine {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .blocks { margin-top: 12px; display: grid; gap: 8px; }
+  .block {
+    background: var(--sheet);
+    border: 1px solid var(--line);
+    padding: 8px 10px;
+  }
+  .block strong { display: block; font-size: 14px; }
+  .block p { margin: 2px 0 0; }
+  .block h4 { margin: 8px 0 2px; font-size: 14px; font-weight: 650; }
+  .money-rows, .donors { list-style: none; margin: 6px 0 0; padding: 0; }
+  .money-rows li, .donors li {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 3px 0;
+    border-top: 1px solid var(--line);
+    font-size: 14px;
+  }
+  .donor-name { min-width: 0; }
+  .di-cycle { margin: 6px 0; padding: 6px 8px; border-left: 3px solid #c9781f; background: rgba(201,120,31,.08); }
+  .donor-kind { color: var(--muted); font-size: 12px; }
+  .donor-amt { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .pac { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
+  .pac p { margin: 2px 0; }
+  .bills { list-style: none; margin: 6px 0 0; padding: 0; }
+  .bills li { padding: 4px 0; border-top: 1px solid var(--line); font-size: 14px; }
+  .lobby { margin: 4px 0 2px; }
+  .lobby summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  .lobby summary:hover { color: var(--ink); }
+  .lobby ul { list-style: none; margin: 4px 0 0; padding: 0; }
+  .lobby li { padding: 4px 0; border-top: 1px solid var(--line); font-size: 13px; }
+  .lobby .lob-snip { color: var(--muted); font-size: 12px; display: block; }
+  .lobby-cap { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+  .running { list-style: none; margin: 6px 0 0; padding: 0; }
+  .running li { padding: 4px 0; border-top: 1px solid var(--line); font-size: 14px; display: flex; justify-content: space-between; gap: 10px; }
+  .running .cand-meta { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .running-more summary { cursor: pointer; color: var(--focus); font-size: 13px; margin-top: 4px; }
+  .layout {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 16px 28px 40px;
+    display: grid;
+    grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
+    gap: 18px;
+    align-items: start;
+  }
+  .filters { padding: 14px; display: grid; gap: 8px; }
+  label { font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
+  input, select {
+    background: white;
+    border: 1px solid #cfc6b8;
+    border-radius: 2px;
+    padding: 8px 10px;
+    width: 100%;
+  }
+  .filter-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .count { margin: 0; padding: 0 14px 10px; color: var(--muted); font-size: 13px; }
+  .directory { max-height: calc(100vh - 280px); overflow: auto; border-top: 1px solid var(--line); }
+  .member-btn {
+    width: 100%;
+    text-align: left;
+    display: grid;
+    grid-template-columns: 42px 1fr;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    background: transparent;
+    cursor: pointer;
+  }
+  .member-btn:hover { background: #efeae1; }
+  .member-btn[aria-current="true"] { background: #e7efe9; }
+  .member-btn img, .member-btn .monogram { width: 42px; height: 52px; font-size: 13px; }
+  .member-btn strong { display: block; font-family: Georgia, Palatino, serif; font-weight: 600; font-size: 16px; }
+  .detail { padding: 22px 22px 28px; min-height: 420px; background: var(--card); }
+  .detail .who img, .detail .who .monogram.lg { width: 120px; height: 146px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  th {
+    text-align: left;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 650;
+    padding: 8px 8px 8px 0;
+    border-bottom: 1px solid var(--ink);
+  }
+  td { vertical-align: top; padding: 10px 10px 10px 0; border-bottom: 1px solid var(--line); }
+  td.when { white-space: nowrap; width: 1%; color: var(--muted); }
+  .question { font-family: Georgia, Palatino, serif; }
+  .plain-note {
+    margin: 6px 0 0;
+    color: var(--muted);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.4;
+    font-weight: 400;
+  }
+  .plain-note a { font-size: 12px; }
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-size: 13px;
+    font-weight: 650;
+    white-space: nowrap;
+  }
+  .pos-yes { background: #e3f0e7; color: #145c38; }
+  .pos-no { background: #f8e6e3; color: #8a2c2c; }
+  .pos-other { background: #eeeae2; color: #514c44; }
+  .result { color: var(--muted); font-size: 13px; display: block; margin-top: 2px; }
+  footer {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 8px 28px 36px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  /* Charts: hand-written inline SVG, no external libraries. Okabe–Ito colorblind-safe palette; no party red/blue. */
+  .chart { margin: 8px 0 4px; }
+  .chart svg { display: block; width: 100%; max-width: 440px; height: auto; overflow: visible; }
+  .chart svg text { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; font-size: 11px; fill: #1b1a17; }
+  .chart svg text.on-dark { fill: #fffdf9; }
+  .chart-title { margin: 6px 0 2px; font-family: Georgia, Palatino, serif; font-size: 15px; font-weight: 500; }
+  .chart-key { list-style: none; margin: 6px 0 0; padding: 0; font-size: 13px; max-width: 440px; }
+  .chart-key li { display: grid; grid-template-columns: 14px 1fr auto; gap: 8px; align-items: center; padding: 2px 0; border-top: 1px solid var(--line); }
+  .chart-key .sw { width: 12px; height: 12px; border: 1px solid rgba(0,0,0,0.35); display: inline-block; }
+  .chart-key .amt { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .chart-cap { margin: 4px 0 0; color: var(--muted); font-size: 12.5px; max-width: 640px; }
+  .big-count { font-family: Georgia, Palatino, serif; font-size: 30px; line-height: 1; margin-right: 8px; font-variant-numeric: tabular-nums; }
+  .count-row { display: flex; align-items: baseline; gap: 4px; margin: 6px 0 2px; }
+  .err { color: var(--rust); }
+  .back { margin: 0 0 12px; }
+  @media (max-width: 860px) {
+    .layout, .home, .scope, .wrap, .mast, footer { padding-left: 14px; padding-right: 14px; }
+    .layout { grid-template-columns: 1fr; }
+    .mast-inner { flex-direction: column; align-items: flex-start; }
+    .directory { max-height: 360px; }
+    .zip-form { flex-direction: column; }
+    .detail .who, .who { grid-template-columns: 84px 1fr; }
+    .detail .who img, .detail .who .monogram.lg { width: 84px; height: 102px; }
+  }
+  .di-emps { list-style: decimal; margin: 6px 0 0 18px; padding: 0; font-size: 14px; }
+  .di-emps li { padding: 3px 0; border-top: 1px solid var(--line); }
+  .di-emps .row { display: flex; justify-content: space-between; gap: 10px; }
+  .di-emps .amt { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .di-more summary { cursor: pointer; color: var(--focus); font-size: 13px; margin-top: 6px; }
+  .civic {
+    margin: 0 0 26px;
+    padding: 16px 18px 14px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-top: 4px solid var(--pine-2);
+  }
+  .civic h2 { font-size: 24px; margin: 0 0 6px; }
+  .civic p { margin: 0 0 8px; }
+  .civic ul { margin: 0 0 10px; padding-left: 20px; }
+  .civic li { margin: 4px 0; }
+  .civic .civic-note { margin: 0; color: var(--muted); font-size: 14px; }
+  @media (max-width: 860px) {
+    .home { margin-top: 18px; }
+    .civic { padding: 14px 14px 12px; }
+    .civic h2 { font-size: 21px; }
+    .civic ul { padding-left: 18px; }
+  }
+  /* What they stand for: neutral styling only, no good/bad colors. */
+  .fd-list { margin: 0 0 10px; padding-left: 18px; }
+  .fd-list li { margin: 4px 0; }
+  .stands .topic { border-top: 1px solid var(--line); padding: 4px 0; }
+  .stands .topic > summary { cursor: pointer; font-size: 14px; padding: 4px 0; }
+  .stands .topic > summary .t-name { font-weight: 600; }
+  .stands .topic > summary .t-counts { color: var(--muted); font-size: 12.5px; }
+  .stands ol.tv { list-style: none; margin: 4px 0 8px; padding: 0; }
+  .stands ol.tv > li { border-top: 1px dashed var(--line); padding: 6px 0; font-size: 13.5px; }
+  .stands .tv-pos { display: inline-block; min-width: 86px; font-weight: 700; border: 1px solid var(--line); padding: 0 6px; margin-right: 6px; background: transparent; color: inherit; }
+  .stands .tv-tag { display: inline-block; font-size: 11.5px; border: 1px solid var(--line); padding: 0 5px; margin-left: 4px; color: var(--muted); }
+  .stands .tv-meta { color: var(--muted); font-size: 12.5px; }
+  .glance { display: grid; gap: 14px; }
+  .conflicts .cf-part { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; }
+  .conflicts .cf-h { font-weight: 600; margin: 0 0 6px; font-size: 14px; }
+  .conflicts .cf-t { width: 100%; margin: 6px 0; }
+  .conflicts ol.cf-top { padding-left: 20px; margin: 4px 0; font-size: 13.5px; }
+  .conflicts ol.cf-top li { margin: 4px 0; }
+  @media (max-width: 480px) {
+    .pie-wrap svg.pie { width: 120px; height: 120px; flex: 0 0 120px; margin: 0 auto; }
+    .pie-table { font-size: 12.5px; flex-basis: 100%; }
+    .card { overflow-wrap: anywhere; }
+  }
+  .pie-wrap { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
+  .pie-wrap svg.pie { width: 150px; height: 150px; flex: 0 0 150px; }
+  .pie-table { border-collapse: collapse; font-size: 13px; flex: 1 1 220px; min-width: 0; }
+  .pie-table th, .pie-table td { text-align: left; padding: 2px 6px 2px 0; border-top: 1px solid var(--line); vertical-align: top; }
+  .pie-table td.num, .pie-table th.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .pie-table .sw { width: 12px; height: 12px; border: 1px solid rgba(0,0,0,0.35); display: inline-block; vertical-align: -1px; margin-right: 4px; }
+  .pie-table tr.excluded td { color: var(--muted); font-style: italic; }
+  .what-means { margin: 4px 0 0; font-size: 13.5px; }
+  .what-means strong { font-weight: 600; }
+  details.who { display: block; margin: 6px 0 2px; border-left: 3px solid var(--line); padding: 2px 0 2px 8px; }
+  details.who > summary { cursor: pointer; font-size: 13.5px; font-weight: 600; }
+  .who-body h5 { margin: 8px 0 2px; font-size: 13px; }
+  .who-body ul { margin: 2px 0 4px; padding-left: 18px; font-size: 13px; }
+  .who-body .snip { display: block; color: var(--muted); font-size: 12px; }
+  .who-body .caption { font-size: 12.5px; color: var(--muted); font-style: italic; }
+  .sumline { margin: 8px 0 6px; padding: 8px 10px; background: var(--sheet); border: 1px solid var(--line); font-size: 14px; line-height: 1.5; }
+  .sumline .sep { color: var(--muted); padding: 0 4px; }
+  .gl { border-bottom: 1px dotted currentColor; cursor: help; text-decoration: none; }
+  .gl:focus { outline: 2px solid var(--focus); outline-offset: 1px; }
+  #gloss-pop { position: fixed; z-index: 50; max-width: min(320px, calc(100vw - 24px)); background: #1c2824; color: #fffdf9;
+    padding: 8px 10px; font-size: 13.5px; line-height: 1.4; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+  #gloss-pop strong { display: block; margin-bottom: 2px; }
+  @media (max-width: 480px) {
+    .card { padding: 12px; }
+    .pie-wrap svg.pie { width: 120px; height: 120px; flex-basis: 120px; margin: 0 auto; }
+    .pie-table { flex-basis: 100%; font-size: 12.5px; }
+    .chart svg { max-width: 100%; }
+    table { font-size: 13px; }
+    .di-emps .row { flex-wrap: wrap; gap: 0 10px; }
+    .di-emps .amt { white-space: normal; }
+  }
+  .rankings { max-width: 1180px; margin: 28px auto 0; padding: 0 16px; }
+  .rankings h2 { font-size: 26px; }
+  .rk-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .rk-pair table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .rk-pair th, .rk-pair td { text-align: left; padding: 4px 6px; border-bottom: 1px solid #ddd; vertical-align: top; }
+  .rk-pair td.num, .rk-pair th.num { text-align: right; white-space: nowrap; }
+  .rk-pair h4 { margin: 8px 0; font-size: 15px; }
+  .rk-scroll { overflow-x: auto; }
+  .rk-cyc { display: none; color: var(--muted, #666); font-size: 12px; }
+  .rk-pair td a { word-break: break-word; }
+  @media (max-width: 760px) {
+    .rk-pair { grid-template-columns: 1fr; }
+    .rk-pair table { font-size: 12.5px; table-layout: auto; }
+    .rk-pair th, .rk-pair td { padding: 4px 3px; }
+    .rk-cycol { display: none; }
+    .rk-cyc { display: block; }
+    .rankings { padding: 0 8px; }
+  }
+</style>
+</head>
+<body>
+<div role="note" style="background:#fff3c4;color:#3a2e00;border-bottom:2px solid #c9a227;padding:8px 14px;font:600 14px/1.4 system-ui,sans-serif;text-align:center">Read-only snapshot for review, data as of 2026-10-15.</div>
+
+<header class="mast">
+  <div class="mast-inner">
+    <div>
+      <p class="kicker">Voter dashboard · federal seats</p>
+      <h1>Home Delegation</h1>
+    </div>
+    <nav class="nav" aria-label="Primary">
+      <a id="nav-zip" href="#/">ZIP code</a>
+      <a id="nav-search" href="#/search">Member search</a>
+    </nav>
+  </div>
+</header>
+
+<section class="home" id="view-home">
+  <section class="civic" aria-labelledby="civic-title">
+    <h2 id="civic-title">Our civic responsibility</h2>
+    <p>Democracy works only when voters know who they're hiring. By using this page, I commit to:</p>
+    <ul>
+      <li>Know everyone on my ballot, not just the names I recognize.</li>
+      <li>Follow the money: who funds each candidate, and who lobbies on the bills they touch.</li>
+      <li>Judge them by their votes, not their ads.</li>
+      <li>Watch for conflicts of interest, and stay skeptical but fair. Money and votes lining up isn't proof of a deal, but it's worth asking about.</li>
+      <li>Show up: call their office, go to town halls, and vote in every election, primaries included.</li>
+    </ul>
+    <p class="civic-note">Everything here comes from public records, including the FEC, Congress, and Senate lobbying disclosures. We show only what's disclosed, say when data is missing, and never score anyone.</p>
+  </section>
+  <h2>Who is on the ballot for this ZIP?</h2>
+  <p>This page shows the U.S. House member for each district a ZIP code’s Census ZCTA overlaps, both U.S. senators, and the governor when a public file lists one — not city, county, or school-board officials, and not a full voting record.</p>
+  <form class="zip-form" id="zip-form">
+    <label class="meta" style="flex:1">U.S. ZIP code
+      <input id="zip-input" name="zip" inputmode="numeric" autocomplete="postal-code" placeholder="99501" maxlength="10" required>
+    </label>
+    <button class="primary" type="submit" style="align-self:end">Look up</button>
+  </form>
+  <p class="meta" id="home-error" role="status"></p>
+  <section class="rankings" id="rankings" aria-labelledby="rankings-title">
+    <h2 id="rankings-title">Donors whose employers lobbied on members' bills</h2>
+    <p class="meta" id="rk-status">Loading…</p>
+    <div id="rk-body"></div>
+  </section>
+</section>
+
+<section class="wrap" id="view-dash" hidden>
+  <div class="dash-head">
+    <div>
+      <p class="kicker" style="color:var(--muted)">ZIP code</p>
+      <h2 id="dash-zip"></h2>
+    </div>
+    <a href="#/">Different ZIP</a>
+  </div>
+  <p class="callout" id="dash-scope"></p>
+  <p class="meta" id="dash-cross"></p>
+  <div id="dash-body"></div>
+</section>
+
+<section class="wrap" id="view-votes" hidden>
+  <article class="panel detail" id="vote-detail"></article>
+</section>
+
+<main class="layout" id="view-search" hidden>
+  <section class="panel" aria-label="Member directory">
+    <form class="filters" id="filters">
+      <label>Search
+        <input id="q" name="q" type="search" placeholder="Name, state, or bioguide id" autocomplete="off">
+      </label>
+      <div class="filter-row">
+        <label>Chamber
+          <select id="chamber" name="chamber">
+            <option value="">Both</option>
+            <option value="house">House</option>
+            <option value="senate">Senate</option>
+          </select>
+        </label>
+        <label>Party
+          <select id="party" name="party">
+            <option value="">All</option>
+            <option>Democrat</option>
+            <option>Republican</option>
+            <option>Independent</option>
+          </select>
+        </label>
+      </div>
+      <label>State or territory
+        <select id="state" name="state"><option value="">All</option></select>
+      </label>
+    </form>
+    <p class="count" id="count">Loading members…</p>
+    <div class="directory" id="directory" role="list"></div>
+  </section>
+  <article class="panel detail" id="detail" aria-live="polite">
+    <div class="detail-empty">
+      <h2>Find a member</h2>
+      <p>Search is the full current Congress file. The ZIP code page is the main way in. Votes here are only the cached roll calls.</p>
+      <p class="meta" id="cache-blurb"></p>
+    </div>
+  </article>
+</main>
+<footer>
+  <p id="sources"></p>
+</footer>
+<script>
+const STATES = {
+  AL:"Alabama", AK:"Alaska", AZ:"Arizona", AR:"Arkansas", CA:"California", CO:"Colorado",
+  CT:"Connecticut", DE:"Delaware", FL:"Florida", GA:"Georgia", HI:"Hawaii", ID:"Idaho",
+  IL:"Illinois", IN:"Indiana", IA:"Iowa", KS:"Kansas", KY:"Kentucky", LA:"Louisiana",
+  ME:"Maine", MD:"Maryland", MA:"Massachusetts", MI:"Michigan", MN:"Minnesota", MS:"Mississippi",
+  MO:"Missouri", MT:"Montana", NE:"Nebraska", NV:"Nevada", NH:"New Hampshire", NJ:"New Jersey",
+  NM:"New Mexico", NY:"New York", NC:"North Carolina", ND:"North Dakota", OH:"Ohio", OK:"Oklahoma",
+  OR:"Oregon", PA:"Pennsylvania", RI:"Rhode Island", SC:"South Carolina", SD:"South Dakota",
+  TN:"Tennessee", TX:"Texas", UT:"Utah", VT:"Vermont", VA:"Virginia", WA:"Washington",
+  WV:"West Virginia", WI:"Wisconsin", WY:"Wyoming", DC:"District of Columbia", PR:"Puerto Rico",
+  GU:"Guam", VI:"U.S. Virgin Islands", AS:"American Samoa", MP:"Northern Mariana Islands"
+};
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const $ = (id) => document.getElementById(id);
+let currentId = null;
+let metaCache = null;
+let searchLoaded = false;
+
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (ch) => ({
+    "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
+  }[ch]));
+}
+function fmtDate(iso) {
+  if (!iso || !iso.includes("-")) return esc(iso);
+  const [y, m, d] = iso.split("-");
+  return `${MONTHS[Number(m) - 1] || m} ${Number(d)}, ${y}`;
+}
+function stateName(code) { return STATES[code] || code || ""; }
+function initials(name) {
+  return (name || "?").split(/\s+/).slice(0, 2).map((part) => part[0] || "").join("").toUpperCase();
+}
+function photo(person, large) {
+  const cls = large ? "monogram lg" : "monogram";
+  if (!person.photo) {
+    return `<span class="${cls}">${esc(initials(person.name))}</span>`;
+  }
+  const w = large ? 120 : (large === false && cls === "monogram" ? 42 : 92);
+  const h = large ? 146 : (w === 42 ? 52 : 112);
+  return `<img alt="" src="${esc(person.photo)}" width="${w}" height="${h}" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'${cls}',textContent:'${esc(initials(person.name))}'}))">`;
+}
+function shareLabel(share) {
+  if (share == null || Number.isNaN(Number(share))) return "Land share not in the file";
+  if (share >= 0.999) return "All of this ZCTA’s land";
+  const pct = share * 100;
+  if (pct < 0.1) return "Less than 0.1% of this ZCTA’s land";
+  return `${pct.toFixed(1)}% of this ZCTA’s land`;
+}
+function posClass(position) {
+  const value = (position || "").toLowerCase();
+  if (value === "yea" || value === "aye" || value === "yes") return "pos-yes";
+  if (value === "nay" || value === "no") return "pos-no";
+  return "pos-other";
+}
+function matchCaption(votes) {
+  const kinds = new Set(votes.map((vote) => vote.match));
+  if (kinds.size === 1 && kinds.has("bioguide")) {
+    return "Joined to this member by bioguide id, which the House Clerk publishes on each recorded vote.";
+  }
+  if (kinds.size === 1 && kinds.has("lis")) {
+    return "The Senate roll-call XML has no bioguide id. These votes are joined on the Senate LIS member id in the legislators file.";
+  }
+  if (kinds.has("name")) {
+    return "At least one vote was joined by a unique name, state, and party match because an id was missing or unrecognized.";
+  }
+  return "Vote rows record how this member was matched to the roll call.";
+}
+function usd(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "";
+  return n.toLocaleString("en-US", {style: "currency", currency: "USD"});
+}
+// ---------- Charts (inline SVG built from data already in the API response) ----------
+const CHART_COLORS = {
+  // Okabe–Ito palette (colorblind-safe). Deliberately no party red/blue for non-party data.
+  green: "#009E73", orange: "#E69F00", purple: "#CC79A7", yellow: "#F0E442",
+  gray: "#d4cdc0", pine: "#2c4038", pineLight: "#b9c7bf",
+};
+let chartSeq = 0;
+function pct(share, digits = 1) {
+  if (share == null || !Number.isFinite(share)) return "";
+  const v = share * 100;
+  if (v > 0 && v < 0.1) return "<0.1%";
+  return `${v.toFixed(digits).replace(/\.0$/, "")}%`;
+}
+function usd0(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "";
+  return n.toLocaleString("en-US", {style: "currency", currency: "USD", maximumFractionDigits: 0});
+}
+// segs: [{label, short, value, color, dark, text}] → one horizontal stacked bar.
+// Each segment is a <g> with its own <title>; in-bar text is shown when it fits,
+// and the HTML key below always lists every segment in text.
+function stackedBarSvg(segs, total, opts) {
+  const W = 320, H = opts.height || 26, id = `ch${++chartSeq}`;
+  let x = 0;
+  const parts = [];
+  for (const seg of segs) {
+    if (!(seg.value > 0) || !(total > 0)) continue;
+    const w = (seg.value / total) * W;
+    const tip = seg.text || `${seg.label}: ${seg.value}`;
+    let inner = "";
+    const long = seg.inLong || `${seg.short} ${seg.inShort}`;
+    if (w >= long.length * 6.2 + 8) inner = long;
+    else if (w >= String(seg.inShort).length * 6.6 + 6) inner = seg.inShort;
+    parts.push(`<g><title>${esc(tip)}</title>
+      <rect x="${x.toFixed(2)}" y="0" width="${w.toFixed(2)}" height="${H}" fill="${seg.color}" stroke="#fffdf9" stroke-width="1.5"></rect>
+      ${inner ? `<text x="${(x + w / 2).toFixed(2)}" y="${H / 2 + 4}" text-anchor="middle"${seg.dark ? ' class="on-dark"' : ""} aria-hidden="true">${esc(inner)}</text>` : ""}</g>`);
+    x += w;
+  }
+  if (opts.trackRest && x < W) {
+    parts.push(`<rect x="${x.toFixed(2)}" y="0" width="${(W - x).toFixed(2)}" height="${H}" fill="#efeae1" stroke="#d4cdc0"></rect>`);
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-labelledby="${id}t ${id}d" focusable="false">
+    <title id="${id}t">${esc(opts.title)}</title><desc id="${id}d">${esc(opts.desc)}</desc>
+    <rect x="0" y="0" width="${W}" height="${H}" fill="none" stroke="#d4cdc0"></rect>
+    ${parts.join("")}</svg>`;
+}
+function chartKey(rows) {
+  return `<ul class="chart-key">${rows.map((r) => `
+    <li><span class="sw" style="background:${r.color}" aria-hidden="true"></span><span>${esc(r.label)}</span><span class="amt">${esc(r.value)}</span></li>`).join("")}</ul>`;
+}
+
+// 1. Funding mix from the OpenFEC committee totals already on the card.
+function fundingChartHtml(finance) {
+  const figures = (finance && finance.totals && finance.totals.figures) || [];
+  if (!figures.length) return "";  // honest empty state handled by financeHtml
+  const by = Object.fromEntries(figures.map((f) => [f.field, Number(f.amount)]));
+  const defs = [
+    {field: "individual_unitemized_contributions", label: "Individuals, unitemized (small donors, $200 or less)", short: "Small", color: CHART_COLORS.green},
+    {field: "individual_itemized_contributions", label: "Individuals, itemized (over $200)", short: "Itemized", color: CHART_COLORS.orange},
+    {field: "other_political_committee_contributions", label: "Other political committees (PACs)", short: "PACs", color: CHART_COLORS.purple},
+    {field: "political_party_committee_contributions", label: "Party committees", short: "Party", color: CHART_COLORS.yellow},
+  ];
+  const present = defs.filter((d) => Number.isFinite(by[d.field]));
+  if (present.length !== defs.length) return "";
+  if (present.some((d) => by[d.field] < 0)) {
+    return `<p class="chart-cap">Funding mix not charted: OpenFEC reports a negative figure for at least one source (refunds can exceed receipts).</p>`;
+  }
+  const sum = present.reduce((acc, d) => acc + by[d.field], 0);
+  if (!(sum > 0)) return "";
+  const segs = present.map((d) => {
+    const share = by[d.field] / sum;
+    return {...d, value: by[d.field], inShort: pct(share, 0), text: `${d.label}: ${usd(by[d.field])} (${pct(share)} of these four sources)`};
+  });
+  const receipts = by.receipts;
+  const rest = Number.isFinite(receipts) ? receipts - sum : null;
+  const cover = finance.totals.coverage_start || finance.totals.coverage_end
+    ? ` OpenFEC coverage ${finance.totals.coverage_start || ""} through ${finance.totals.coverage_end || ""}.` : "";
+  const restLine = rest != null && rest > 0.5
+    ? ` These four sources total ${usd0(sum)} of ${usd0(receipts)} in receipts; the other ${usd0(rest)} (e.g. transfers, candidate money, loans, offsets) is not charted.`
+    : "";
+  const desc = segs.map((s) => `${s.label} ${usd0(s.value)}, ${pct(s.value / sum)}`).join("; ") + ".";
+  return `<div class="chart">
+    <p class="chart-title">Where the money came from</p>
+    ${stackedBarSvg(segs, sum, {title: `Funding mix, ${finance.cycle || ""} cycle`, desc})}
+    ${chartKey(segs.map((s) => ({color: s.color, label: s.label, value: `${usd0(s.value)} · ${pct(s.value / sum)}`})))}
+    <p class="chart-cap">Shares are of contributions from these four sources only.${restLine}${cover} Not a career total.</p>
+  </div>`;
+}
+
+// 2. Votes in the cached roll-call set only.
+const VOTE_CAPTION = "Latest cached roll calls only (40 House, 40 Senate), not a full career record.";
+function votesChartHtml(person) {
+  const vf = person.vote_frequency;
+  if (!vf || !vf.in_cache) return "";
+  const size = Math.max(vf.set_size || 0, vf.in_cache);
+  const noRecord = Math.max(0, size - vf.in_cache);
+  const segs = [
+    {label: "Yea or Aye", short: "Yea", value: vf.yea, color: CHART_COLORS.green},
+    {label: "Nay or No", short: "Nay", value: vf.nay, color: CHART_COLORS.orange},
+    {label: "Not Voting", short: "NV", value: vf.not_voting, color: CHART_COLORS.gray},
+    {label: "Present or other", short: "Other", value: vf.other, color: CHART_COLORS.purple},
+    {label: "No record for this member in the set", short: "None", value: noRecord, color: "#efeae1"},
+  ].map((s) => ({...s, inShort: String(s.value), text: `${s.label}: ${s.value} of ${size}`}));
+  const shown = segs.filter((s) => s.value > 0 || s.short === "Yea" || s.short === "Nay" || s.short === "NV");
+  const desc = shown.map((s) => `${s.label} ${s.value}`).join(", ") + ` of ${size} cached roll calls.`;
+  let party = "";
+  if (vf.party_compare) {
+    const share = vf.party_match / vf.party_compare;
+    const plural = {Democrat: "Democratic", Republican: "Republican", Independent: "Independent"}[person.party] || "party";
+    const label = `Matched the ${plural} majority on ${vf.party_match} of ${vf.party_compare} Yea/Nay votes (${pct(share, 0)})`;
+    party = `${stackedBarSvg([{label, short: "Matched", inShort: pct(share, 0), inLong: `Matched ${pct(share, 0)}`, value: vf.party_match, color: CHART_COLORS.pine, dark: true, text: label}],
+      vf.party_compare, {height: 18, trackRest: true, title: "Party-line agreement", desc: label + "."})}
+      <p class="chart-cap">${esc(label)}. Only votes where the member voted Yea or Nay and the party had a Yea or Nay majority are compared.</p>`;
+  } else {
+    party = `<p class="chart-cap">No Yea/Nay votes with a party majority to compare in this set.</p>`;
+  }
+  return `<div class="chart">
+    <p class="chart-title">How they voted</p>
+    ${stackedBarSvg(shown, size, {title: `Votes in the cached ${person.chamber === "senate" ? "Senate" : "House"} roll calls`, desc})}
+    ${chartKey(shown.map((s) => ({color: s.color, label: s.label, value: `${s.value} of ${size}`})))}
+    <p class="chart-title" style="font-size:14px;margin-top:8px">Party-line agreement</p>
+    ${party}
+    <p class="chart-cap">${esc(VOTE_CAPTION)}</p>
+  </div>`;
+}
+
+// 3. Who's running: count of other FEC filers for this seat and cycle.
+function runningChartHtml(r) {
+  if (!r || !r.loaded) return "";
+  const rows = r.candidates || [];
+  const n = rows.length;
+  const statutory = rows.filter((c) => c.candidate_status_label === "Statutory candidate").length;
+  const notYet = rows.filter((c) => c.candidate_status_label === "Not yet a statutory candidate").length;
+  const otherStatus = n - statutory - notYet;
+  const head = `<div class="count-row"><span class="big-count">${r.truncated ? "≥" : ""}${n}</span><span class="meta">other FEC ${n === 1 ? "filer" : "filers"} for this seat, ${esc(r.election_year || "")} election</span></div>`;
+  let bar = "";
+  if (n) {
+    const segs = [
+      {label: "Statutory candidate (FEC: raised or spent over $5,000)", short: "Statutory", value: statutory, color: CHART_COLORS.pine, dark: true},
+      {label: "Not yet a statutory candidate", short: "Not yet", value: notYet, color: CHART_COLORS.pineLight},
+      {label: "Other or unlisted FEC status", short: "Other", value: otherStatus, color: CHART_COLORS.gray},
+    ].filter((s) => s.value > 0).map((s) => ({...s, inShort: String(s.value), text: `${s.label}: ${s.value} of ${n}`}));
+    const desc = segs.map((s) => `${s.label}: ${s.value}`).join("; ") + `. ${n} filers in total.`;
+    bar = `${stackedBarSvg(segs, n, {height: 20, title: `Other FEC filers for this seat: ${n}`, desc})}
+      ${chartKey(segs.map((s) => ({color: s.color, label: s.label, value: `${s.value} of ${n}`})))}`;
+  }
+  return `<div class="chart">${head}${bar}
+    <p class="chart-cap">Filing is not the same as being on the ballot. Status labels are as the FEC records them.</p></div>`;
+}
+// 4. Where the donor money works: FEC Schedule A aggregates by employer/occupation.
+const DONOR_CAPTION = "From itemized individual contributions over $200 reported to the FEC, grouped by the donor's self-reported employer and occupation. Employer means where the donor works, not that the company gave money; corporations can't give directly to campaigns. Industry groups use simple keyword rules and may misclassify some donors.";
+// rows: [{label, value, share, color}] → one horizontal bar per row, scaled to the largest share.
+function hbarSvg(rows, opts) {
+  const W = 440, labelW = 150, valW = 112, barMax = W - labelW - valW - 8, rowH = 20, id = `ch${++chartSeq}`;
+  const max = Math.max(...rows.map((r) => r.share || 0), 0.0001);
+  const H = rows.length * rowH;
+  const parts = rows.map((r, i) => {
+    const y = i * rowH;
+    const w = Math.max((r.share || 0) / max * barMax, r.value > 0 ? 1 : 0);
+    const label = r.label.length > 24 ? r.label.slice(0, 23) + "…" : r.label;
+    return `<g><title>${esc(`${r.label}: ${usd0(r.value)} (${pct(r.share)})`)}</title>
+      <text x="0" y="${y + 14}" aria-hidden="true">${esc(label)}</text>
+      <rect x="${labelW}" y="${y + 4}" width="${w.toFixed(2)}" height="${rowH - 8}" fill="${r.color}"></rect>
+      <text x="${(labelW + w + 4).toFixed(2)}" y="${y + 14}" aria-hidden="true">${esc(`${pct(r.share)} · ${usd0(r.value)}`)}</text></g>`;
+  }).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-labelledby="${id}t ${id}d" focusable="false">
+    <title id="${id}t">${esc(opts.title)}</title><desc id="${id}d">${esc(opts.desc)}</desc>${parts}</svg>`;
+}
+function donorGroupRows(group) {
+  const rows = [];
+  for (const r of group.industries || []) rows.push({label: r.label, value: r.amount, share: r.share, color: CHART_COLORS.orange});
+  for (const r of group.statuses || []) rows.push({label: r.label, value: r.amount, share: r.share, color: CHART_COLORS.pineLight});
+  const u = group.unclassified;
+  if (u && u.amount > 0) rows.push({label: "Unclassified", value: u.amount, share: u.share, color: CHART_COLORS.gray});
+  return rows;
+}
+function donorGroupChart(group, kind, cycle) {
+  if (!group || !(group.total > 0)) return `<p class="chart-cap">No ${kind} rows with a positive total were returned.</p>`;
+  const rows = donorGroupRows(group);
+  const desc = rows.map((r) => `${r.label} ${usd0(r.value)}, ${pct(r.share)}`).join("; ") + ".";
+  const u = group.unclassified || {};
+  const nr = (u.detail && u.detail.not_reported) || 0;
+  const amb = (u.detail && u.detail.ambiguous) || 0;
+  const bits = [];
+  if (nr > 0) bits.push(`${usd0(nr)} has no ${kind} reported (blank, N/A, NONE, or “information requested”)`);
+  const nae = (u.detail && u.detail.not_an_employer) || 0;
+  if (nae > 0) bits.push(`${usd0(nae)} names a role such as homemaker or student instead of a workplace`);
+  if (amb > 0) bits.push(`${usd0(amb)} matched more than one industry and was left unclassified`);
+  const uline = `<p class="chart-cap"><strong>Unclassified: ${pct(u.share || 0)}</strong> of ${usd0(group.total)} by ${kind} (${usd0(u.amount || 0)})${bits.length ? "; of that, " + bits.join("; ") : ""}. Industry bars are orange; Retired, Not employed, and Self-employed are shown as their own groups, not industries.</p>`;
+  return `${hbarSvg(rows, {title: `Itemized individual money by donor ${kind} group, ${cycle} cycle`, desc})}${uline}`;
+}
+
+function financialDisclosuresHtml(fd) {
+  if (!fd) return "";
+  const cap = `<p class="chart-cap">${esc(fd.caption || "")}</p>`;
+  const scope = fd.cache_date ? `<p class="fine">House Clerk index as of ${esc(fd.cache_date)}.</p>` : "";
+  if (fd.chamber === "senate" || fd.status === "senate_not_indexed") {
+    return `<div class="block"><strong>Conflicts of interest (financial disclosures)</strong>
+      <p>${esc(fd.note || "Senate filings are not listed yet.")}</p>
+      <p class="fine">Senate source: <a href="https://efdsearch.senate.gov/" target="_blank" rel="noopener">efdsearch.senate.gov</a></p>
+      ${cap}</div>`;
+  }
+  if (fd.applies === false) {
+    return `<div class="block"><strong>Conflicts of interest (financial disclosures)</strong><p>${esc(fd.note || "Not applicable.")}</p>${cap}</div>`;
+  }
+  if (!fd.loaded) {
+    return `<div class="block"><strong>Conflicts of interest (financial disclosures)</strong>
+      <p>${esc(fd.note || "No matched House Clerk filing in the cached index.")}</p>
+      ${scope}${cap}
+      <p class="fine">Browse the Clerk index: <a href="https://disclosures-clerk.house.gov/" target="_blank" rel="noopener">disclosures-clerk.house.gov</a></p>
+    </div>`;
+  }
+  const row = (f) => `<li><a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.type_label || f.type)}</a>
+      <span class="fine">${f.filed_on ? `filed ${esc(f.filed_on)}` : ""}${f.year ? ` · coverage year ${esc(f.year)}` : ""} · DocID ${esc(f.docid)}</span></li>`;
+  const annual = (fd.annual || []);
+  const ptr = (fd.ptr || []);
+  const other = (fd.other || []);
+  let body = "";
+  if (annual.length) body += `<p class="fine">Annual / candidate reports</p><ul class="fd-list">${annual.map(row).join("")}</ul>`;
+  if (ptr.length) body += `<p class="fine">Periodic transaction reports (stock and other trades)</p><ul class="fd-list">${ptr.map(row).join("")}</ul>`;
+  if (other.length) body += `<details><summary class="fine">Other Clerk filings (${other.length})</summary><ul class="fd-list">${other.map(row).join("")}</ul></details>`;
+  if (!body) body = `<p>${esc(fd.note || "No filings listed.")}</p>`;
+  return `<div class="block"><strong>Conflicts of interest (financial disclosures)</strong>
+    ${body}
+    ${scope}${cap}
+    <p class="fine">Source: House Clerk financial disclosure PDFs. Links open the official file. Holdings are not copied into this app.</p>
+  </div>`;
+}
+
+function donorIndustryHtml(d) {
+  if (!d) return "";
+  const committee = d.committee
+    ? `${esc(d.committee.name || "")} (${esc(d.committee.id || "")})`
+    : "no principal campaign committee on file";
+  const scope = `<p class="fine">Cycle: <strong>${esc(d.cycle || "not set")}</strong> two-year period · Committee: ${committee}${d.cache_date ? ` · OpenFEC data as of ${esc(d.cache_date)}` : ""}.</p>`;
+  const cap = `<p class="chart-cap">${esc(d.caption || DONOR_CAPTION)}</p>`;
+  const cycleNote = d.cycle_note
+    ? `<p class="di-cycle"><strong>${esc(d.cycle_note)}</strong></p>`
+    : "";
+  if (!d.loaded) {
+    return `<div class="block"><strong>Where the donor money works</strong><p>${esc(d.note || "Not loaded.")}</p>${scope}${cap}</div>`;
+  }
+  const te = (d.top_employers && d.top_employers.rows) || [];
+  const emps = te.length
+    ? `<ol class="di-emps">${te.map((r) => `<li><div class="row"><span>${esc(r.name)} <span class="donor-kind">${esc(r.industry)}</span></span><span class="amt">${esc(usd0(r.amount))}${r.count != null ? ` · ${esc(r.count)} ${r.count === 1 ? "contribution" : "contributions"}` : ""}</span></div>${r.variants && r.variants.length ? `<span class="fine">Spellings combined: ${esc(r.variants.join("; "))}</span>` : ""}</li>`).join("")}</ol>`
+    : `<p>No named employers among the rows returned.</p>`;
+  const emp = d.by_employer || {};
+  const coverEmp = d.employer_truncated
+    ? `Covers the ${esc(d.employer_rows_retrieved)} largest of ${esc(Number(d.employer_row_count).toLocaleString())} employer names the FEC lists for this committee and cycle; smaller employers are not included in these shares.`
+    : `Covers all ${esc(d.employer_rows_retrieved)} employer names the FEC lists for this committee and cycle.`;
+  const coverOcc = d.occupation_truncated
+    ? `Covers the ${esc(d.occupation_rows_retrieved)} largest of ${esc(Number(d.occupation_row_count).toLocaleString())} occupations listed.`
+    : `Covers all ${esc(d.occupation_rows_retrieved)} occupations listed.`;
+  return `<div class="block"><strong>Where the donor money works</strong>
+    ${cycleNote}
+    <div class="chart">
+      <p class="chart-title">Top employers of itemized donors, ${esc(d.cycle)} cycle</p>
+      ${emps}
+      <p class="chart-cap">Ranked by dollars from donors who named that employer. Count is the number of itemized contributions the FEC aggregated, not unique people. Retired, not employed, self-employed, homemaker/student, and blank entries are not employers and are left out of this list (${esc(usd0(d.top_employers.left_out_status_amount || 0))}). Spellings are combined when they differ by INC/LLC/LLP/CORP/CO or a leading “The”, or when one name is a shorter form of another (Proskauer, Proskauer Rose LLP) and both fall in the same classified industry.</p>
+    </div>
+    <div class="chart">
+      <p class="chart-title">Industry share, by donor employer</p>
+      ${donorGroupChart(emp, "employer", d.cycle)}
+      <p class="chart-cap">${coverEmp}</p>
+    </div>
+    <details class="di-more"><summary>Same money grouped by donor occupation</summary>
+      <div class="chart">${donorGroupChart(d.by_occupation, "occupation", d.cycle)}<p class="chart-cap">${coverOcc} The FEC publishes employer and occupation totals separately, so the two groupings cannot be combined donor by donor.</p></div>
+    </details>
+    ${scope}${cap}
+    <p class="fine">Source: OpenFEC /schedules/schedule_a/by_employer/ and /by_occupation/. Rules: industry_rules.json. OpenSecrets is not used.</p>
+  </div>`;
+}
+function donorList(rows) {
+  if (!rows || !rows.length) return "";
+  return `<ol class="donors">${rows.map((row) => `
+    <li>
+      <span class="donor-name">${esc(row.name)} <span class="donor-kind">${esc(row.type || "")}</span></span>
+      <span class="donor-amt">${esc(usd(row.amount))}</span>
+    </li>`).join("")}</ol>`;
+}
+function townHallBlock(halls) {
+  halls = halls || {};
+  return `
+      <div class="block">
+        <strong>Town halls</strong>
+        <p>Last: ${esc(halls.last || "No public town-hall feed")}</p>
+        <p>Next: ${esc(halls.next || "No public town-hall feed")}</p>
+        <p class="fine">${esc(halls.note || "")}</p>
+      </div>`;
+}
+const DISCLOSURE_FALLBACK = "Disclosed contributions only; donors behind groups that do not report their own donors are not in this feed.";
+function financeHtml(person, extra) {
+  const finance = person.finance || {};
+  const disclosure = finance.disclosure_note || (extra && extra.disclosure_note) || DISCLOSURE_FALLBACK;
+  const town = townHallBlock(extra && extra.town_halls);
+  if (finance.applies === false) {
+    return `
+    <div class="blocks">
+      <div class="block">
+        <strong>Campaign money</strong>
+        <p>${esc(finance.detail || "Governors are not in the FEC the same way. No federal contribution list is shown.")}</p>
+      </div>
+      <div class="block"><p>${esc(disclosure)}</p></div>
+      ${town}
+    </div>`;
+  }
+  const committee = finance.committee;
+  const committeeLine = committee
+    ? `<p>${esc(committee.designation || "Principal campaign committee")}: <strong>${esc(committee.name)}</strong> (${esc(committee.id)})</p>`
+    : "";
+  const cycleLine = finance.cycle
+    ? `<p>Two-year cycle: <strong>${esc(finance.cycle)}</strong></p><p class="fine">${esc(finance.cycle_rule || "")}</p>`
+    : "";
+  let body = "";
+  if (finance.error) body += `<p>${esc(finance.error)}</p>`;
+  const totals = (finance.totals && finance.totals.figures) || [];
+  if (totals.length) {
+    const coverStart = finance.totals.coverage_start;
+    const coverEnd = finance.totals.coverage_end;
+    const cover = coverStart || coverEnd
+      ? `<p class="fine">OpenFEC coverage ${esc(coverStart || "")} through ${esc(coverEnd || "")}. Not a career total.</p>`
+      : `<p class="fine">Not a career total.</p>`;
+    body += fundingChartHtml(finance);
+    body += `<ul class="money-rows">${totals.map((row) => `
+      <li><span>${esc(row.label)}</span><span class="donor-amt">${esc(usd(row.amount))}</span></li>`).join("")}</ul>${cover}`;
+  } else if (finance.totals && finance.totals.error && !finance.error) {
+    body += `<p>${esc(finance.totals.error)}</p>`;
+  }
+  if (finance.contributors && finance.contributors.length) {
+    body += `<h4>Top disclosed contributors</h4><p class="fine">${esc(finance.contributor_note || "")}</p>${donorList(finance.contributors)}`;
+  }
+  if (finance.pacs) {
+    body += `<h4>Who funded these PACs</h4><p class="fine">${esc(finance.pac_note || "Disclosed donors only.")}</p>`;
+    if (!finance.pacs.length) {
+      body += `<p>No PAC, committee, or party contributors were in the itemized rows used here.</p>`;
+    }
+    body += finance.pacs.map((pac) => `
+      <div class="pac">
+        <p><strong>${esc(pac.name)}</strong> gave ${esc(usd(pac.amount))} <span class="donor-kind">${esc(pac.type || "")}</span></p>
+        ${pac.committee_id ? `<p class="fine">Committee ${esc(pac.committee_id)}</p>` : ""}
+        ${donorList(pac.donors)}
+        ${pac.donors_note ? `<p class="fine">${esc(pac.donors_note)}</p>` : ""}
+      </div>`).join("");
+  }
+  if (finance.scope_note) body += `<p class="fine">${esc(finance.scope_note)}</p>`;
+  const fallback = (extra && extra.funding && extra.funding.detail) || "Campaign finance was not returned for this card.";
+  return `
+    <div class="blocks">
+      <div class="block">
+        <strong>Campaign money</strong>
+        ${committeeLine}
+        ${cycleLine}
+        ${body || `<p>${esc(fallback)}</p>`}
+      </div>
+      <div class="block"><p>${esc(disclosure)}</p></div>
+      ${town}
+    </div>`;
+}
+function voteAside(blocks) {
+  const funding = blocks.funding || {};
+  const disclosure = blocks.disclosure_note || DISCLOSURE_FALLBACK;
+  const money = funding.loaded
+    ? `<p>Disclosed committee receipts for this member are on the ZIP dashboard. This vote page does not repeat them. ${esc(funding.detail || "")}</p>`
+    : `<p>${esc(funding.detail || "Campaign money is not loaded.")}</p>`;
+  return `
+    <div class="blocks">
+      <div class="block"><strong>${esc(funding.heading || "Campaign money")}</strong>${money}</div>
+      <div class="block"><p>${esc(disclosure)}</p></div>
+      ${townHallBlock(blocks.town_halls)}
+    </div>`;
+}
+function frequencyHtml(person) {
+  const row = person.vote_frequency;
+  if (!row || !row.label) return "";
+  return `<div class="block"><strong>Votes in this cached set</strong>${votesChartHtml(person)}<p>${esc(row.label)}</p></div>`;
+}
+const LOBBY_CAPTION = "From Senate lobbying disclosures (LD-2). A filing mentions this bill; it does not show what was asked for, which side the client took, or any contact with this member. Reported amounts cover the whole filing, not this bill alone.";
+function lobbyAmount(f) {
+  if (f.amount == null) return "No amount reported on the filing";
+  const kind = f.amount_kind === "expenses" ? "expenses reported (whole filing)" : "income reported (whole filing)";
+  return `${usd0(f.amount)} ${kind}`;
+}
+// Quiet expandable list when the cache has filings for the bill. A bill that was
+// never searched says so; it is never shown as zero lobbying.
+const LOBBY_NOT_CHECKED = "Not yet checked against lobbying filings.";
+function lobbyHtml(lob, caption) {
+  if (!lob) return "";
+  if (lob.status === "skipped") return `<p class="lobby-cap">${esc(lob.note || "Not checked against lobbying filings.")}</p>`;
+  if (lob.status !== "ok") return `<p class="lobby-cap">${esc(LOBBY_NOT_CHECKED)}</p>`;
+  if (!lob.filing_count) {
+    return `<p class="lobby-cap">Checked: no 2025–2026 LD-2 filing found that names this bill.${lob.truncated ? " The search hit its result cap, so this may be incomplete." : ""}</p>`;
+  }
+  const rows = (lob.filings || []).map((f) => {
+    const link = f.url ? ` <a href="${esc(f.url)}" rel="noopener noreferrer">Filing</a>` : "";
+    const period = [f.period_display, f.year].filter(Boolean).join(" ");
+    return `<li><strong>${esc(f.client)}</strong> · registrant ${esc(f.registrant)}<br>
+      <span class="fine">${esc(period)}${f.filing_type ? " · " + esc(f.filing_type) : ""} · ${esc(lobbyAmount(f))}${link}</span>
+      ${f.snippet ? `<span class="lob-snip">Issue text: “${esc(f.snippet)}”</span>` : ""}</li>`;
+  }).join("");
+  const top = (lob.top_clients || []).filter((c) => c.amount != null).slice(0, 3);
+  const topLine = top.length
+    ? `<p class="lobby-cap">Largest reported amounts among these filings, by client (whole filings, not this bill alone): ${top.map((c) => `${esc(c.client)} ${esc(usd0(c.amount))}`).join("; ")}.</p>`
+    : "";
+  const more = lob.more ? `<p class="lobby-cap">${esc(lob.more)} more filings are in the local cache and not listed here.</p>` : "";
+  const trunc = lob.truncated ? `<p class="lobby-cap">The LDA search returned more candidate filings than were read; this list may be incomplete.</p>` : "";
+  return `<details class="lobby"><summary>Organizations that reported lobbying on this bill (${esc(lob.count)}${lob.truncated ? "; list may be incomplete" : ""})</summary>
+    <ul>${rows}</ul>${more}${topLine}${trunc}<p class="lobby-cap">${esc(caption || LOBBY_CAPTION)}</p></details>`;
+}
+function billsHtml(person) {
+  const bioguide = person.bioguide || "";
+  const sponsored = person.sponsored;
+  if (!sponsored) return "";
+  const bills = Array.isArray(sponsored.bills) ? sponsored.bills.slice(0, 5) : [];
+  if (!bills.length) {
+    const message = sponsored.error || sponsored.note || "No sponsored bills are listed.";
+    return `<div class="block"><strong>Sponsored bills</strong><p>${esc(message)}</p></div>`;
+  }
+  const items = bills.map((bill) => {
+    const number = bill.number ? `${esc(bill.number)} — ` : "";
+    const when = bill.date ? ` <span class="fine">${esc(bill.date)}</span>` : "";
+    const link = bill.url
+      ? ` <a href="${esc(bill.url)}" rel="noopener noreferrer">Congress.gov</a>`
+      : "";
+    return `<li>${number}${esc(bill.title || "Title not in the Congress.gov response")}${when}${link}${lobbyHtml(bill.lobbying)}${whoDetails(bill.bill_key, bioguide)}</li>`;
+  }).join("");
+  const note = sponsored.note ? `<p class="fine">${esc(sponsored.note)}</p>` : "";
+  const ls = sponsored.lobbying_summary;
+  const lobbyLine = ls
+    ? `<p class="fine">${esc(ls.line)}${ls.detail ? " " + esc(ls.detail) : ""}${ls.loaded && ls.cache_date ? ` (${esc(ls.years || "")}, cache ${esc(ls.cache_date)})` : ""}</p>${ls.coverage_line ? `<p class="lobby-cap">${esc(ls.coverage_line)}</p>` : ""}${ls.loaded ? `<p class="lobby-cap">${esc(ls.caption || LOBBY_CAPTION)}</p>` : ""}`
+    : "";
+  return `<div class="block"><strong>Sponsored bills</strong>${note}${lobbyLine}<ul class="bills">${items}</ul></div>`;
+}
+function runningItem(c) {
+  const flags = [c.incumbent_challenge_full || "FEC status not given", c.candidate_status_label, c.inactive ? "FEC marks inactive" : ""].filter(Boolean).join(" · ");
+  const link = c.fec_url ? `<a href="${esc(c.fec_url)}" rel="noopener noreferrer">${esc(c.name)}</a>` : esc(c.name);
+  return `<li><span>${link} <span class="donor-kind">${esc(c.party || "party not given")}</span><br><span class="fine">${esc(flags)} · ${esc(c.candidate_id)}</span>${c.note ? `<br><span class="fine">${esc(c.note)}</span>` : ""}</span></li>`;
+}
+function runningHtml(person) {
+  const r = person.running;
+  if (!r) return "";
+  const label = `<p class="fine">${esc(r.label || "")}</p>`;
+  const when = r.cache_date ? `<p class="fine">OpenFEC /candidates/ as of ${esc(r.cache_date)}${r.election_year ? `, ${esc(r.election_year)} election` : ""}.</p>` : "";
+  if (!r.loaded) {
+    return `<div class="block"><strong>Who's running</strong>${label}<p>${esc(r.note || "Not loaded.")}</p>${when}</div>`;
+  }
+  const notes = (r.incumbent_notes || []).map((t) => `<p class="fine">${esc(t)}</p>`).join("");
+  const rows = r.candidates || [];
+  const first = rows.slice(0, 6).map(runningItem).join("");
+  const rest = rows.slice(6);
+  const more = rest.length
+    ? `<details class="running-more"><summary>Show ${rest.length} more</summary><ul class="running">${rest.map(runningItem).join("")}</ul></details>`
+    : "";
+  const list = rows.length
+    ? `<p class="meta">${esc(rows.length)} other ${rows.length === 1 ? "filing" : "filings"} for the ${esc(r.election_year)} election:</p><ul class="running">${first}</ul>${more}`
+    : `<p>${esc(r.note || "No other filings returned.")}</p>`;
+  const trunc = r.truncated ? `<p class="fine">OpenFEC listed more rows than were fetched; this list may be incomplete.</p>` : "";
+  return `<div class="block"><strong>Who's running</strong>${runningChartHtml(r)}${label}${notes}${list}${trunc}${when}<p class="fine">Names (FEC spelling, last name first), party, and incumbent/challenger/open-seat status are as the FEC records them. Links go to fec.gov.</p></div>`;
+}
+
+// ---------- What they stand for (full-session votes grouped by Congress.gov policy area) ----------
+const STANDS_CAPTION = "Grouped by Congress.gov's official policy area. Shows how they voted, not why. Final-passage, amendment, and procedural votes can mean different things; read the note for each.";
+const standsCache = new Map();
+function standsPos(v) {
+  if (v.side === "yes") return "Yea";
+  if (v.side === "no") return "Nay";
+  if (v.side === "not_voting") return "Not voting";
+  return v.position || "Other";
+}
+function standsPartyLine(v, label) {
+  if (v.side === "not_voting") return `Did not vote. ${esc(label)}: ${esc(v.party_majority || "no majority (tie)")}.`;
+  if (v.with_party === true) return `Voted with the ${esc(label)} (${esc(v.party_majority)}).`;
+  if (v.with_party === false) return `Voted against the ${esc(label)} (${esc(v.party_majority)}).`;
+  if (!v.party_majority) return `No party majority to compare (tie or no Yea/Nay votes in the party).`;
+  return `Recorded “${esc(v.position)}”; not compared with the ${esc(label)} (${esc(v.party_majority)}).`;
+}
+function standsVoteRows(topic, sf) {
+  return `<ol class="tv">${topic.votes.map((v) => {
+    const where = `${v.chamber === "senate" ? "Senate vote" : "House roll"} ${esc(v.number)}`;
+    const bill = v.bill
+      ? `<div class="tv-meta">${v.bill_url ? `<a href="${esc(v.bill_url)}" rel="noopener noreferrer">${esc(v.bill)}</a>` : esc(v.bill)}${v.bill_title ? ` — ${esc(v.bill_title)}` : ""}</div>`
+      : (v.nomination ? `<div class="tv-meta">Nomination ${esc(v.nomination)}</div>` : "");
+    const tag = v.summarized
+      ? (v.plain_basis === "title_only" ? `<span class="tv-tag" title="No official CRS summary was available; this note uses the official title and vote question only.">From title only</span>` : "")
+      : `<span class="tv-tag" title="${esc(sf.factual_flag || "")}">Not yet summarized</span>`;
+    const src = v.plain_source_url ? ` <a href="${esc(v.plain_source_url)}" rel="noopener noreferrer">Source</a>` : "";
+    const recorded = standsPos(v).toLowerCase() !== String(v.position || "").toLowerCase() ? ` (recorded “${esc(v.position)}”)` : "";
+    return `<li><span class="tv-pos">${esc(standsPos(v))}</span><span class="tv-meta">${recorded ? recorded + " · " : ""}${fmtDate(v.date)} · <a href="${esc(v.source_url)}" rel="noopener noreferrer">${where}</a> · ${esc(v.result)}</span>
+      <div class="question">${esc(v.question)}</div>${bill}
+      <p class="plain-note">${esc(v.plain_language)}${tag}${src}</p>
+      <div class="tv-meta">${standsPartyLine(v, sf.party_label || "party majority")}</div>${whoDetails(v.bill_key, sf.bioguide)}</li>`;
+  }).join("")}</ol>`;
+}
+function standsCounts(t) {
+  const bits = [`${t.count} vote${t.count === 1 ? "" : "s"}`, `Yea ${t.yea}`, `Nay ${t.nay}`, `Not voting ${t.not_voting}`];
+  if (t.other) bits.push(`Present/other ${t.other}`);
+  if (t.party_compared) bits.push(`with party majority ${t.party_matched} of ${t.party_compared}`);
+  return bits.join(" · ");
+}
+function standsForHtml(sf, bioguide) {
+  if (!sf) return "";
+  sf.bioguide = bioguide;
+  const head = `<strong>What they stand for</strong><p class="chart-cap">${esc(sf.caption || STANDS_CAPTION)}</p>`;
+  if (!sf.loaded) return `<div class="block stands">${head}<p>${esc(sf.note || "Full-session votes are not loaded.")}</p></div>`;
+  const scope = `<p class="fine">Votes covered: ${esc(sf.scope)} This member has a recorded position on ${esc(sf.vote_count)} of ${esc(sf.scope_count)}. Party comparison: ${esc(sf.party_label)}. ${esc(sf.majority_rule || "")} Cache ${esc(sf.cache_date || "")}.</p>`;
+  const unsum = sf.unsummarized
+    ? `<p class="fine">${esc(sf.unsummarized)} of these notes are marked “Not yet summarized”. ${esc(sf.factual_flag || "")}</p>` : "";
+  if (!sf.topics || !sf.topics.length) return `<div class="block stands">${head}${scope}<p>${esc(sf.note || "No recorded positions.")}</p></div>`;
+  const topics = sf.topics.map((t, i) => `<details class="topic" data-bioguide="${esc(bioguide)}" data-topic="${esc(t.topic)}">
+      <summary><span class="t-name">${esc(t.topic)}</span> <span class="t-counts">${esc(standsCounts(t))}</span></summary>
+      <div class="topic-body">${t.votes ? standsVoteRows(t, sf) : `<p class="meta">Opening…</p>`}</div></details>`).join("");
+  return `<div class="block stands">${head}${scope}${unsum}<p class="fine">Topics are sorted by number of votes. Open a topic to see each vote.</p>${topics}</div>`;
+}
+document.addEventListener("toggle", async (event) => {
+  const el = event.target;
+  if (!(el instanceof HTMLDetailsElement) || !el.classList.contains("topic") || !el.open) return;
+  const body = el.querySelector(".topic-body");
+  if (!body || body.dataset.loaded || body.querySelector("ol.tv")) return;
+  const id = el.dataset.bioguide;
+  try {
+    if (!standsCache.has(id)) {
+      standsCache.set(id, fetch(`/api/members/${encodeURIComponent(id)}/stands-for`).then((r) => r.json()));
+    }
+    const sf = (await standsCache.get(id)).stands_for;
+    sf.bioguide = id;
+    const topic = (sf.topics || []).find((t) => t.topic === el.dataset.topic);
+    body.innerHTML = topic ? standsVoteRows(topic, sf) : `<p class="meta">This topic is no longer in the cache.</p>`;
+    body.dataset.loaded = "1";
+  } catch (err) {
+    body.innerHTML = `<p class="err">Could not load these votes from the local cache.</p>`;
+  }
+}, true);
+
+
+// ---------- Pie / donut charts (inline SVG + exact-number table) ----------
+// Neutral, colorblind-safe slices: no party red/blue and no green/red good-bad pairs.
+const PIE = ["#2c4038", "#E69F00", "#CC79A7", "#F0E442", "#8c6d46", "#b9c7bf", "#5b5348"];
+const PIE_STATUS = {retired: "#d4cdc0", not_employed: "#a39d93", self_employed: "#ece4d2", unclassified: "url(#hatch)"};
+function hatchDefs() {
+  return `<defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#f2eee6"></rect><line x1="0" y1="0" x2="0" y2="6" stroke="#9b958b" stroke-width="2"></line></pattern></defs>`;
+}
+function swatch(color) {
+  if (String(color).startsWith("url(")) return `<span class="sw" style="background:repeating-linear-gradient(45deg,#f2eee6 0 2px,#9b958b 2px 4px)" aria-hidden="true"></span>`;
+  return `<span class="sw" style="background:${color}" aria-hidden="true"></span>`;
+}
+// slices: [{label, value, color, display}]; table rows also take {excluded:true} rows (not drawn).
+function pieSvg(slices, opts) {
+  const id = `ch${++chartSeq}`, R = 70, r = 38, C = 75;
+  const drawn = slices.filter((x) => !x.excluded && x.value > 0);
+  const total = drawn.reduce((a, x) => a + x.value, 0);
+  let a0 = -Math.PI / 2;
+  const pt = (rad, a) => `${(C + rad * Math.cos(a)).toFixed(2)} ${(C + rad * Math.sin(a)).toFixed(2)}`;
+  const parts = drawn.map((x) => {
+    const frac = x.value / total;
+    if (frac >= 0.9999) {
+      return `<g><title>${esc(x.tip || x.label)}</title><circle cx="${C}" cy="${C}" r="${(R + r) / 2}" fill="none" stroke="${x.color}" stroke-width="${R - r}"></circle></g>`;
+    }
+    const a1 = a0 + frac * 2 * Math.PI, big = frac > 0.5 ? 1 : 0;
+    const d = `M ${pt(R, a0)} A ${R} ${R} 0 ${big} 1 ${pt(R, a1)} L ${pt(r, a1)} A ${r} ${r} 0 ${big} 0 ${pt(r, a0)} Z`;
+    a0 = a1;
+    return `<g><title>${esc(x.tip || x.label)}</title><path d="${d}" fill="${x.color}" stroke="#fffdf9" stroke-width="1.5"></path></g>`;
+  }).join("");
+  const center = opts.center ? `<text x="${C}" y="${C + 5}" text-anchor="middle" style="font-size:13px;font-weight:600" aria-hidden="true">${esc(opts.center)}</text>` : "";
+  return `<svg class="pie" viewBox="0 0 150 150" role="img" aria-labelledby="${id}t ${id}d" focusable="false">
+    <title id="${id}t">${esc(opts.title)}</title><desc id="${id}d">${esc(opts.desc)}</desc>${hatchDefs()}${parts}${center}</svg>`;
+}
+function pieTable(slices, heads) {
+  return `<table class="pie-table"><thead><tr><th scope="col">${esc(heads[0])}</th><th scope="col" class="num">${esc(heads[1])}</th><th scope="col" class="num">${esc(heads[2])}</th></tr></thead><tbody>${slices.map((x) => `
+    <tr${x.excluded ? ' class="excluded"' : ""}><td>${x.excluded ? "" : swatch(x.color)}${esc(x.label)}</td><td class="num">${esc(x.display)}</td><td class="num">${esc(x.shareText || "")}</td></tr>`).join("")}</tbody></table>`;
+}
+function pieBlock(title, slices, opts, heads) {
+  return `<div class="chart"><p class="chart-title">${esc(title)}</p>
+    <div class="pie-wrap">${pieSvg(slices, opts)}${pieTable(slices, heads)}</div>
+    <p class="what-means"><strong>What this means:</strong> ${esc(opts.means)}</p>
+    ${opts.caption || ""}</div>`;
+}
+
+// a. Funding sources (same four contribution fields and exclusions as the funding bar).
+function fundingPieHtml(finance) {
+  const figures = (finance && finance.totals && finance.totals.figures) || [];
+  if (!figures.length) return `<div class="chart"><p class="chart-title">Where the money came from</p><p class="chart-cap">No FEC totals in the local cache for this card.</p></div>`;
+  const by = Object.fromEntries(figures.map((f) => [f.field, Number(f.amount)]));
+  const defs = [
+    {field: "individual_unitemized_contributions", label: "Small donors (individuals, $200 or less, unitemized)", color: PIE[0]},
+    {field: "individual_itemized_contributions", label: "Large individual donors (itemized, over $200)", color: PIE[1]},
+    {field: "other_political_committee_contributions", label: "PACs (other political committees)", color: PIE[2]},
+    {field: "political_party_committee_contributions", label: "Party committees", color: PIE[3]},
+  ];
+  if (defs.some((d) => !Number.isFinite(by[d.field]))) return "";
+  if (defs.some((d) => by[d.field] < 0)) return `<p class="chart-cap">Funding mix not charted: OpenFEC reports a negative figure for at least one source (refunds can exceed receipts).</p>`;
+  const sum = defs.reduce((a, d) => a + by[d.field], 0);
+  if (!(sum > 0)) return "";
+  const slices = defs.map((d) => ({...d, value: by[d.field], display: usd0(by[d.field]), shareText: pct(by[d.field] / sum),
+    tip: `${d.label}: ${usd(by[d.field])} (${pct(by[d.field] / sum)} of these four sources)`}));
+  const receipts = by.receipts;
+  const rest = Number.isFinite(receipts) ? receipts - sum : null;
+  slices.push({label: "Other receipts (transfers, candidate money, loans, offsets): not in the chart", excluded: true,
+    display: rest != null ? usd0(Math.max(rest, 0)) : "no data", shareText: "—"});
+  const cover = finance.totals.coverage_start || finance.totals.coverage_end
+    ? ` OpenFEC coverage ${finance.totals.coverage_start || ""} through ${finance.totals.coverage_end || ""}.` : "";
+  const restLine = rest != null && rest > 0.5
+    ? ` These four sources total ${usd0(sum)} of ${usd0(receipts)} in receipts; the other ${usd0(rest)} (e.g. transfers, candidate money, loans, offsets) is not charted.` : "";
+  const top = slices.filter((x) => !x.excluded).sort((a, b) => b.value - a.value)[0];
+  const desc = slices.filter((x) => !x.excluded).map((x) => `${x.label} ${x.display}, ${x.shareText}`).join("; ") + ".";
+  return pieBlock(`Where the money came from, ${finance.cycle || ""} cycle`, slices, {
+    title: `Funding sources, ${finance.cycle || ""} cycle`, desc,
+    means: `Of the money this campaign reported from these four kinds of contributors, the largest part (${top.shareText}) came from ${top.label.replace(/ \(.*\)$/, "").toLowerCase()}.`,
+    caption: `<p class="chart-cap">Shares are of contributions from these four sources only.${esc(restLine)}${esc(cover)} Not a career total.</p>`,
+  }, ["Source", "Amount", "Share"]);
+}
+
+// b. Donor industries by employer: top 5 industries + "Other industries"; status groups and Unclassified as their own neutral slices.
+function industryPieHtml(d) {
+  if (!d) return "";
+  const head = "Donor industries (by employer)";
+  if (!d.loaded) return `<div class="chart"><p class="chart-title">${head}</p><p class="chart-cap">${esc(d.note || "Not loaded.")}</p></div>`;
+  const g = d.by_employer || {};
+  if (!(g.total > 0)) return `<div class="chart"><p class="chart-title">${head}</p><p class="chart-cap">No employer rows with a positive total were returned.</p></div>`;
+  const inds = [...(g.industries || [])].sort((a, b) => b.amount - a.amount);
+  const top = inds.slice(0, 5), rest = inds.slice(5);
+  const slices = top.map((r, i) => ({label: r.label, value: r.amount, color: PIE[i]}));
+  if (rest.length) {
+    const v = rest.reduce((a, r) => a + r.amount, 0);
+    slices.push({label: `Other industries (${rest.map((r) => r.label).join(", ")})`, value: v, color: PIE[6]});
+  }
+  for (const st of g.statuses || []) slices.push({label: `${st.label} (not an industry)`, value: st.amount, color: PIE_STATUS[st.id] || "#d4cdc0"});
+  const u = g.unclassified;
+  if (u && u.amount > 0) slices.push({label: "Unclassified (no rule matched, blank, or ambiguous)", value: u.amount, color: PIE_STATUS.unclassified});
+  for (const x of slices) { x.display = usd0(x.value); x.shareText = pct(x.value / g.total); x.tip = `${x.label}: ${usd0(x.value)} (${x.shareText})`; }
+  const desc = slices.map((x) => `${x.label} ${x.display}, ${x.shareText}`).join("; ") + ".";
+  const topInd = top[0];
+  const means = topInd
+    ? `Among itemized donors who named a workplace that our keyword rules could place in an industry, the most money came from people working in ${topInd.label} (${pct(topInd.amount / g.total)} of all itemized individual money). ${u && u.amount > 0 ? `${pct(u.share)} could not be classified.` : ""}`
+    : `None of the itemized donor employers matched an industry rule.`;
+  return pieBlock(`${head}, ${d.cycle} cycle`, slices, {title: `Itemized individual money by donor employer group, ${d.cycle} cycle`, desc, means,
+    caption: `${d.cycle_note ? `<p class="di-cycle"><strong>${esc(d.cycle_note)}</strong></p>` : ""}<p class="fine">Cycle: ${esc(d.cycle || "not set")} two-year period. Total itemized individual money: ${esc(usd0(g.total))}.</p><p class="chart-cap">${esc(d.caption || DONOR_CAPTION)}</p>`,
+  }, ["Group", "Amount", "Share"]);
+}
+
+// c. Party-line voting over the full session (votes_session cache).
+function partyPieHtml(sf) {
+  const head = "Voting with their party, full session";
+  if (!sf || !sf.loaded || !sf.party_line) return `<div class="chart"><p class="chart-title">${head}</p><p class="chart-cap">${esc((sf && sf.note) || "Full-session votes are not in the local cache.")}</p></div>`;
+  const pl = sf.party_line, n = pl.scope_count;
+  const lab = pl.party_label || "party majority";
+  const slices = [
+    {label: `With the ${lab}`, value: pl.with_party, color: PIE[0]},
+    {label: `Against the ${lab}`, value: pl.against_party, color: PIE[1]},
+    {label: "Not voting", value: pl.not_voting, color: PIE_STATUS.unclassified},
+    {label: "Voted, but not compared (Present, or no party majority/tie)", value: pl.not_compared, color: PIE_STATUS.retired},
+    {label: "No record (not yet in office or not listed)", value: pl.no_record, color: PIE_STATUS.self_employed},
+  ].filter((x, i) => i < 3 || x.value > 0);
+  for (const x of slices) { x.display = `${x.value} of ${n}`; x.shareText = pct(x.value / n); x.tip = `${x.label}: ${x.value} of ${n} roll calls`; }
+  const desc = slices.map((x) => `${x.label}: ${x.value}`).join("; ") + `. ${pl.scope}`;
+  const means = pl.compared
+    ? `On the ${pl.compared} votes where they voted Yea or Nay and their party had a clear majority, they sided with that majority ${pl.with_party} times (${pct(pl.share_with, 0)}).`
+    : `There were no votes to compare with their party majority.`;
+  return pieBlock(head, slices, {title: "Party-line voting, full session", desc, means, center: pl.share_with != null ? pct(pl.share_with, 0) : "",
+    caption: `<p class="chart-cap">Scope: ${esc(pl.scope)} Shares are of all ${esc(n)} roll calls in scope; the center number is the share with the party among the ${esc(pl.compared)} compared votes. ${esc(sf.majority_rule || "")}</p>`,
+  }, ["Vote", "Count", "Share"]);
+}
+function glanceHtml(person) {
+  if (person.chamber !== "house" && person.chamber !== "senate") return "";
+  return `<div class="block"><strong>At a glance</strong><div class="glance">
+    ${fundingPieHtml(person.finance)}${industryPieHtml(person.donor_industry)}${partyPieHtml(person.stands_for)}</div></div>`;
+}
+
+// ---------- Who this bill affects and who weighed in (local caches; loaded when opened) ----------
+const WHO_CAPTION = "This shows who the bill names and who lobbied on it. It does not show who gains or loses, and lobbying can be for or against a bill.";
+function whoDetails(key, bioguide) {
+  if (!key) return "";
+  return `<details class="who" data-key="${esc(key)}" data-bioguide="${esc(bioguide || "")}"><summary>Who this bill affects and who weighed in</summary><div class="who-body"><p class="meta">Opening…</p></div></details>`;
+}
+function whoBody(w) {
+  const n = w.named || {};
+  let named;
+  if (!n.has_summary) named = `<p>${esc(n.note || "No CRS summary is available for this bill.")}</p>`;
+  else if (!(n.items || []).length) named = `<p>The official summary does not name specific groups, industries, agencies, or programs.</p>`;
+  else named = `<ul>${n.items.map((i) => `<li>${esc(i.item)}<span class="snip">“${esc(i.snippet)}”</span></li>`).join("")}</ul>${n.more ? `<p class="fine">${esc(n.more)} more names in the summary are not listed.</p>` : ""}`;
+  const crs = n.has_summary ? `<p class="fine">CRS summary${n.version ? `: ${esc(n.version)}` : ""}${n.date ? `, ${esc(n.date)}` : ""}. Names are copied from the summary text; nothing is added.</p>` : "";
+  const l = w.lobbying || {};
+  let lob;
+  if (l.status !== "ok") lob = `<p>${esc(l.note || "Not yet checked against lobbying filings.")}</p>`;
+  else if (!l.count) lob = `<p>Checked: no 2025–2026 LD-2 filing found that names this bill.</p>`;
+  else {
+    const cl = (c) => `${esc(c.client)}${c.amount != null ? ` <span class="fine">(${esc(usd0(c.amount))} reported, whole filing${c.filings > 1 ? "s" : ""})</span>` : ""}`;
+    const groups = (l.groups || []).map((g) => `<li><strong>${esc(g.label)}</strong> (${g.clients.length}): ${g.clients.slice(0, 6).map(cl).join("; ")}${g.clients.length > 6 ? `; and ${g.clients.length - 6} more` : ""}</li>`).join("");
+    const ung = (l.ungrouped || []);
+    const ungLine = ung.length ? `<li><strong>Not matched to an industry rule</strong> (${ung.length}): ${ung.slice(0, 8).map(cl).join("; ")}${ung.length > 8 ? `; and ${ung.length - 8} more` : ""}</li>` : "";
+    const top = (l.top_clients || []).filter((c) => c.amount != null);
+    lob = `<p><strong>${esc(l.count)}</strong> organizations reported lobbying on this bill (${esc(l.filing_count)} LD-2 filings${l.truncated ? "; list may be incomplete" : ""}).</p>
+      ${top.length ? `<p class="fine">Top clients by reported amount (whole filings, not this bill alone): ${top.map((c) => `${esc(c.client)} ${esc(usd0(c.amount))}`).join("; ")}.</p>` : ""}
+      <ul>${groups}${ungLine}</ul><p class="fine">Grouped with the same keyword rules as donor employers (industry_rules.json).</p>`;
+  }
+  const lobCap = `<p class="lobby-cap">${esc(l.caption || LOBBY_CAPTION)}</p>`;
+  let over = "";
+  const o = w.donor_overlap;
+  if (o) {
+    let body;
+    if (o.note && !(o.rows || []).length) body = `<p>${esc(o.note)}</p>`;
+    else body = `<p>${esc(usd0(o.total))} from ${esc(o.member)}'s itemized donors in these industries${o.share != null ? ` (${esc(pct(o.share))} of ${esc(usd0(o.itemized_total))} itemized individual money, ${esc(o.cycle)} cycle)` : ""}:</p>
+      <ul>${o.rows.map((r) => `<li>${esc(r.label)}: ${esc(usd0(r.amount))}${r.count != null ? ` · ${esc(r.count)} contributions` : ""}</li>`).join("")}</ul>`;
+    over = `<h5>Member's donors in those industries — ${esc(o.label)}</h5>${body}<p class="fine">${esc(o.caption)}</p>`;
+  }
+  const c = w.cbo || {};
+  const cbo = (c.estimates || []).length
+    ? `<ul>${c.estimates.map((e) => `<li><a href="${esc(e.url)}" rel="noopener noreferrer" target="_blank">${esc(e.title || "CBO cost estimate")}</a>${e.description ? ` <span class="fine">${esc(e.description)}</span>` : ""}${e.pubDate ? ` <span class="fine">(${esc(String(e.pubDate).slice(0, 10))})</span>` : ""}</li>`).join("")}</ul>`
+    : `<p>${esc(c.checked ? "Congress.gov lists no CBO cost estimate for this bill." : (c.note || "Not yet checked on Congress.gov."))}</p>`;
+  return `<h5>Named in the official summary</h5>${named}${crs}
+    <h5>Who lobbied on it</h5>${lob}${lobCap}${over}
+    <h5>Cost (CBO)</h5>${cbo}
+    <p class="caption">${esc(w.caption || WHO_CAPTION)}</p>`;
+}
+const whoCache = new Map();
+document.addEventListener("toggle", async (event) => {
+  const el = event.target;
+  if (!(el instanceof HTMLDetailsElement) || !el.classList.contains("who") || !el.open) return;
+  const body = el.querySelector(".who-body");
+  if (body.dataset.loaded) return;
+  const url = `/api/bills/${encodeURIComponent(el.dataset.key)}/who?bioguide=${encodeURIComponent(el.dataset.bioguide || "")}`;
+  try {
+    if (!whoCache.has(url)) whoCache.set(url, fetch(url).then((r) => r.json()));
+    body.innerHTML = whoBody(await whoCache.get(url));
+    body.dataset.loaded = "1";
+  } catch (err) {
+    body.innerHTML = `<p class="err">Could not load this from the local cache.</p>`;
+  }
+}, true);
+
+// ---------- One-line summary built only from cached facts on the card ----------
+function summaryLine(person) {
+  if (person.chamber !== "house" && person.chamber !== "senate") return "";
+  const bits = [];
+  const di = person.donor_industry;
+  const inds = (di && di.loaded && di.by_employer && di.by_employer.industries) || [];
+  const topInd = [...inds].sort((a, b) => b.amount - a.amount)[0];
+  bits.push(topInd ? `Top donor industry: ${esc(topInd.label)} <span class="fine">(${esc(pct(topInd.share))} of itemized, ${esc(di.cycle)})</span>` : `Top donor industry: no data`);
+  const pl = person.stands_for && person.stands_for.party_line;
+  bits.push(pl && pl.share_with != null ? `Votes with party ${esc(pct(pl.share_with, 0))} <span class="fine">(this session, ${esc(pl.compared)} compared votes)</span>` : `Votes with party: no data`);
+  const ls = person.sponsored && person.sponsored.lobbying_summary;
+  if (ls && ls.loaded && ls.checked) bits.push(`${esc(ls.mentioned)} of ${esc(ls.checked)} listed bills drew lobbying <span class="fine">(LD-2)</span>`);
+  else bits.push(`Bills drawing lobbying: no data`);
+  const nu = person.reelection && person.reelection.next_up;
+  const yr = nu && (String(nu).match(/\b(20\d\d)\b/) || [])[1];
+  bits.push(yr ? `Up for reelection ${esc(yr)}` : `Reelection: no data`);
+  return `<p class="sumline" aria-label="Summary">${bits.join('<span class="sep" aria-hidden="true">·</span>')}</p>`;
+}
+
+// ---------- Glossary tooltips (hover, focus, or tap) ----------
+const GLOSSARY = {
+  "cloture": "A Senate vote to end debate on a bill or nomination so it can move to a vote. It usually takes 60 votes.",
+  "motion to recommit": "A House motion, made just before final passage, to send the bill back to committee.",
+  "suspension of the rules": "A House fast-track procedure for bills: debate is limited, no amendments are allowed, and passage takes a two-thirds vote.",
+  "rule": "In the House, a resolution from the Rules Committee that sets how a bill will be debated, such as time limits and which amendments may be offered.",
+  "previous question": "A House vote on whether to end debate and vote right away on the pending measure, often a rule.",
+  "PAC": "Political action committee: a group that collects money and gives it to candidates or other committees, within legal limits.",
+  "Super PAC": "A committee that can raise and spend unlimited money on its own political ads, but cannot give to or coordinate with candidates.",
+  "itemized": "Contributions from a donor whose gifts total more than $200 in a cycle. The campaign must report the donor's name, employer, and occupation.",
+  "LD-2": "The quarterly lobbying report filed with Congress. It lists the client, the issues and bills lobbied on, and the income or expenses.",
+  "CRS": "Congressional Research Service: a nonpartisan office of the Library of Congress that writes the official bill summaries.",
+  "CBO": "Congressional Budget Office: a nonpartisan office of Congress that estimates what bills would cost.",
+};
+const GLOSS_PATTERNS = [
+  ["suspension of the rules", /\b(suspension of the rules|suspend the rules)\b/i],
+  ["motion to recommit", /\b(motion to recommit)\b/i],
+  ["previous question", /\b(previous question)\b/i],
+  ["cloture", /\b(cloture)\b/i],
+  ["Super PAC", /\b(Super PACs?)\b/],
+  ["PAC", /\b(PACs?)\b/],
+  ["itemized", /\b(itemized)\b/i],
+  ["LD-2", /(LD-2)\b/],
+  ["CRS", /\b(CRS)\b/],
+  ["CBO", /\b(CBO)\b/],
+  ["rule", /\b(rule)\b(?! of| that| is| was|:)/],
+];
+function glossify(root) {
+  if (!root) return;
+  const scopes = root.querySelectorAll(".block, .sumline, td, .who-body, li.tv-row, ol.tv > li");
+  for (const scope of scopes) {
+    if (scope.dataset.gloss) continue;
+    scope.dataset.gloss = "1";
+    const done = new Set();
+    const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT, {
+      acceptNode(n) {
+        const p = n.parentElement;
+        if (!p || p.closest("a, button, svg, summary, .gl, script, style, th, h3, h4, h5, .chart-title")) return NodeFilter.FILTER_REJECT;
+        return n.nodeValue.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+      },
+    });
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    for (const node of nodes) {
+      for (const [term, rx] of GLOSS_PATTERNS) {
+        if (done.has(term)) continue;
+        if (term === "PAC" && done.has("Super PAC") && /Super PAC/.test(node.nodeValue)) continue;
+        const m = rx.exec(node.nodeValue);
+        if (!m) continue;
+        if (term === "rule" && !/(vote|question|resolution|providing for|House)/i.test(scope.textContent)) continue;
+        const after = node.splitText(m.index);
+        after.splitText(m[1].length);
+        const span = document.createElement("span");
+        span.className = "gl"; span.tabIndex = 0; span.setAttribute("role", "button");
+        span.setAttribute("aria-expanded", "false"); span.dataset.term = term;
+        span.setAttribute("aria-label", `${m[1]}: show definition`);
+        span.textContent = m[1];
+        after.replaceWith(span);
+        done.add(term);
+        break;  // one term per text node pass; the remaining text is a new node not revisited
+      }
+    }
+  }
+}
+let glossOpen = null;
+function glossShow(el) {
+  let pop = document.getElementById("gloss-pop");
+  if (!pop) { pop = document.createElement("div"); pop.id = "gloss-pop"; pop.setAttribute("role", "tooltip"); document.body.appendChild(pop); }
+  const term = el.dataset.term;
+  pop.innerHTML = `<strong>${esc(term)}</strong>${esc(GLOSSARY[term] || "")}`;
+  pop.hidden = false;
+  const r = el.getBoundingClientRect();
+  const w = Math.min(320, window.innerWidth - 24);
+  let left = Math.min(Math.max(12, r.left), window.innerWidth - w - 12);
+  pop.style.left = `${left}px`;
+  pop.style.top = `${r.bottom + 6}px`;
+  if (r.bottom + 6 + pop.offsetHeight > window.innerHeight - 8) pop.style.top = `${Math.max(8, r.top - pop.offsetHeight - 6)}px`;
+  if (glossOpen && glossOpen !== el) glossOpen.setAttribute("aria-expanded", "false");
+  el.setAttribute("aria-expanded", "true");
+  el.setAttribute("aria-describedby", "gloss-pop");
+  glossOpen = el;
+}
+function glossHide() {
+  const pop = document.getElementById("gloss-pop");
+  if (pop) pop.hidden = true;
+  if (glossOpen) { glossOpen.setAttribute("aria-expanded", "false"); glossOpen.removeAttribute("aria-describedby"); }
+  glossOpen = null;
+}
+document.addEventListener("click", (e) => {
+  const el = e.target.closest && e.target.closest(".gl");
+  if (el) { e.preventDefault(); if (glossOpen === el) glossHide(); else glossShow(el); return; }
+  if (!(e.target.closest && e.target.closest("#gloss-pop"))) glossHide();
+});
+document.addEventListener("keydown", (e) => {
+  const el = e.target.closest && e.target.closest(".gl");
+  if (e.key === "Escape") glossHide();
+  else if (el && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); glossOpen === el ? glossHide() : glossShow(el); }
+});
+if (window.matchMedia && window.matchMedia("(hover: hover)").matches) {
+  document.addEventListener("mouseover", (e) => { const el = e.target.closest && e.target.closest(".gl"); if (el) glossShow(el); });
+  document.addEventListener("mouseout", (e) => { const el = e.target.closest && e.target.closest(".gl"); if (el && el === glossOpen) glossHide(); });
+}
+window.addEventListener("scroll", () => { if (glossOpen) glossShow(glossOpen); }, {passive: true});
+new MutationObserver(() => {
+  for (const id of ["dash-body", "vote-detail"]) glossify(document.getElementById(id));
+  document.querySelectorAll(".card, .who-body, .topic-body").forEach((el) => glossify(el));
+}).observe(document.body, {childList: true, subtree: true});
+// ---------- Potential conflicts of interest (cached facts only; no score, no flags) ----------
+function conflictsHtml(person) {
+  const c = person.conflicts;
+  if (!c) return financialDisclosuresHtml(person.financial_disclosures);
+  const b = c.bills || {}, sp = b.sponsored || {}, vo = b.voted || {}, co = b.combined || {};
+  const nc = (t) => t.not_checked ? ` (${t.not_checked} not yet checked; not counted as zero)` : "";
+  const top = (b.top || []).map((r) => `<li><strong>${esc(r.label)}</strong> ${esc(r.title)}
+      <span class="fine">· ${esc(r.orgs)} organizations in ${esc(r.filings)} filings${r.truncated ? " (search hit the result cap; may be more)" : ""} · ${[r.sponsored ? "sponsored" : "", r.voted ? `voted on in ${r.roll_calls} roll call${r.roll_calls === 1 ? "" : "s"}` : ""].filter(Boolean).join(", ")}</span>
+      ${whoDetails(r.key, person.bioguide)}</li>`).join("");
+  const partA = `<p class="cf-h">Bills that drew lobbying</p>
+    <table class="pie-table cf-t"><thead><tr><th scope="col">Bills</th><th scope="col" class="num">Total</th><th scope="col" class="num">Checked</th><th scope="col" class="num">Lobbied</th></tr></thead><tbody>
+      <tr><td>Sponsored (recent, listed)</td><td class="num">${esc(sp.bills)}</td><td class="num">${esc(sp.checked)}</td><td class="num">${esc(sp.lobbied)}</td></tr>
+      <tr><td>Voted on this session (${esc(vo.roll_calls)} roll calls)</td><td class="num">${esc(vo.bills)}</td><td class="num">${esc(vo.checked)}</td><td class="num">${esc(vo.lobbied)}</td></tr>
+      <tr><td><strong>Either, distinct bills</strong></td><td class="num">${esc(co.bills)}</td><td class="num">${esc(co.checked)}</td><td class="num"><strong>${esc(co.lobbied)}</strong></td></tr></tbody></table>
+    <p class="what-means"><strong>What this means:</strong> LD-2 lobbying filings (${esc(b.years || "")}) mention ${esc(co.lobbied)} of the ${esc(co.checked)} checked bills this member sponsored or voted on${esc(nc(co))}.</p>
+    ${top ? `<p class="fine">Most-lobbied of these, by number of organizations:</p><ol class="cf-top">${top}</ol>` : ""}
+    <p class="fine">Votes: ${esc(b.vote_scope || "")} Not Voting is excluded. Sponsored: up to five recent bills from Congress.gov.</p>`;
+  const o = c.overlap || {};
+  let partB;
+  if (o.itemized_total == null) partB = `<p class="fine">${esc(o.note || "Donor industries are not in the local cache.")}</p>`;
+  else {
+    const rest = Math.max(0, o.itemized_total - o.overlap_total);
+    const slices = [
+      {label: "From industries that lobbied on these bills", value: o.overlap_total, color: PIE[1], display: usd0(o.overlap_total), shareText: pct(o.share)},
+      {label: "All other itemized money (other industries, retired, not employed, self-employed, unclassified)", value: rest, color: PIE_STATUS.retired, display: usd0(rest), shareText: pct(rest / o.itemized_total)},
+    ];
+    const rows = (o.industries || []).map((r) => `<tr><td>${esc(r.label)}</td><td class="num">${esc(usd0(r.amount))}</td><td class="num">${esc(pct(r.share))}</td><td class="num">${esc(r.bills)}</td></tr>`).join("");
+    partB = `<div class="pie-wrap">${pieSvg(slices, {title: "Itemized donor money from industries that lobbied", desc: slices.map((x) => `${x.label} ${x.display}, ${x.shareText}`).join("; "), center: pct(o.share)})}${pieTable(slices, ["Itemized individual money", "Amount", "Share"])}</div>
+      ${rows ? `<table class="pie-table cf-t"><thead><tr><th scope="col">Top overlapping industries</th><th scope="col" class="num">Amount</th><th scope="col" class="num">Share</th><th scope="col" class="num">Bills lobbied</th></tr></thead><tbody>${rows}</tbody></table>` : ""}
+      ${o.more_industries ? `<p class="fine">${esc(o.more_industries)} smaller overlapping industr${o.more_industries === 1 ? "y is" : "ies are"} in the total but not listed.</p>` : ""}
+      <p class="what-means"><strong>What this means:</strong> ${esc(usd0(o.overlap_total))} of ${esc(usd0(o.itemized_total))} (${esc(pct(o.share))}) in itemized individual money came from people whose employers are in an industry where some organization lobbied on a bill this member sponsored or voted on.</p>
+      ${o.note ? `<p class="fine">${esc(o.note)}</p>` : ""}
+      <p class="fine">Method: ${esc(c.method)} ${o.cycle_note ? esc(o.cycle_note) : ""}</p>`;
+  }
+  const fd = c.disclosures || person.financial_disclosures || {};
+  let partC;
+  if (fd.chamber === "senate" || fd.status === "senate_not_indexed") {
+    partC = `<p>${esc(fd.note || "Senate filings are not listed yet.")}</p><p class="fine">Senate source: <a href="https://efdsearch.senate.gov/" target="_blank" rel="noopener">efdsearch.senate.gov</a></p>`;
+  } else if (!fd.loaded) {
+    partC = `<p>${esc(fd.note || "No matched House Clerk filing in the cached index.")}</p><p class="fine"><a href="https://disclosures-clerk.house.gov/" target="_blank" rel="noopener">disclosures-clerk.house.gov</a></p>`;
+  } else {
+    const row = (f) => `<li><a href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.type_label || f.type)}${f.year ? `, ${esc(f.year)}` : ""}</a> <span class="fine">${f.filed_on ? `filed ${esc(f.filed_on)}` : ""}</span></li>`;
+    const ptr = fd.ptr || [];
+    partC = `<ul class="fd-list">${(fd.annual || []).map(row).join("") || "<li>No annual report in the cached index.</li>"}</ul>
+      <p class="fine">Periodic transaction reports (stock and other trades):</p>
+      ${ptr.length ? `<ul class="fd-list">${ptr.map(row).join("")}</ul>` : `<p class="fine">None in the cached House Clerk index.</p>`}
+      <p class="fine">House Clerk index as of ${esc(fd.cache_date || "")}. Links open the official PDFs.</p>`;
+  }
+  return `<div class="block conflicts"><strong>Potential conflicts of interest</strong>
+    <div class="cf-part">${partA}</div>
+    <div class="cf-part"><p class="cf-h">Donor-lobby overlap${o.cycle ? `, ${esc(o.cycle)} cycle` : ""}</p>${partB}</div>
+    <div class="cf-part"><p class="cf-h">Financial disclosures</p>${partC}</div>
+    <p class="chart-cap"><strong>${esc(c.caption)}</strong></p></div>`;
+}
+
+function personCard(person, extra) {
+  const party = `<span class="party party-${esc(person.party_code)}">${esc(person.party || "Party not in the file")}</span>`;
+  const place = [person.office_label || person.office, stateName(person.state), person.seat].filter(Boolean).join(" · ");
+  const next = person.reelection && person.reelection.next_up
+    ? `<p class="next-up">Next up for reelection: <strong>${esc(person.reelection.next_up)}</strong></p>`
+    : `<p class="next-up">Next election: <strong>not in the public file</strong></p>`;
+  const term = person.term_start || person.term_end
+    ? `<p class="fine">Term in the source file: ${fmtDate(person.term_start)} – ${fmtDate(person.term_end)}</p>`
+    : "";
+  const rule = person.reelection ? `<p class="rule">${esc(person.reelection.rule)}</p>` : "";
+  const phone = (person.phone || "").trim()
+    ? `<p class="meta">Office phone: ${esc(person.phone)}</p>`
+    : "";
+  const site = (person.url || "").trim()
+    ? `<p class="links"><a href="${esc(person.url)}" rel="noopener noreferrer">${esc(person.url.replace(/^https?:\/\//, ""))}</a></p>`
+    : "";
+  const votes = person.bioguide
+    ? `<p><a href="#/z/${esc(extra.zip || "")}/m/${esc(person.bioguide)}">Cached votes for ${esc(person.name)}</a></p>
+       <p class="fine">Opens only the roll calls already cached in this app. ${esc(extra.vote_scope || "")}</p>`
+    : `<p class="fine">${esc(person.votes_note || "")}</p>`;
+  const photoNote = person.photo_source ? `<p class="fine">Photo: ${esc(person.photo_source)}.</p>` : `<p class="fine">Photo: unitedstates.github.io/images, linked, not stored here.</p>`;
+  return `<article class="card" data-bioguide="${esc(person.bioguide || "")}">
+    <div class="who">
+      ${photo(person, false)}
+      <div>
+        <h3>${esc(person.name)}</h3>
+        <p class="seat">${party}<br>${esc(place)}</p>
+        ${extra.share ? `<p class="meta">${esc(extra.share)}</p>` : ""}
+        ${phone}
+        ${site}
+        ${photoNote}
+      </div>
+    </div>
+    ${summaryLine(person)}
+    ${next}
+    ${term}
+    ${rule}
+    ${votes}
+    ${glanceHtml(person)}
+    ${conflictsHtml(person)}
+    ${frequencyHtml(person)}
+    ${person.stands_for ? standsForHtml(person.stands_for, person.bioguide) : ""}
+    ${billsHtml(person)}
+    ${runningHtml(person)}
+    ${financeHtml(person, extra)}
+    ${donorIndustryHtml(person.donor_industry)}
+    ${person.source ? `<p class="fine">${esc(person.source)}</p>` : ""}
+  </article>`;
+}
+
+function show(which) {
+  $("view-home").hidden = which !== "home";
+  $("view-dash").hidden = which !== "dash";
+  $("view-votes").hidden = which !== "votes";
+  $("view-search").hidden = which !== "search";
+  $("nav-zip").setAttribute("aria-current", which === "search" ? "false" : "page");
+  $("nav-search").setAttribute("aria-current", which === "search" ? "page" : "false");
+}
+
+function parseHash() {
+  const hash = location.hash || "#/";
+  let m;
+  if ((m = hash.match(/^#\/z\/(\d{5})\/m\/([A-Za-z]\d{6})$/))) return { view: "votes", zip: m[1], id: m[2] };
+  if ((m = hash.match(/^#\/m\/([A-Za-z]\d{6})$/))) return { view: "votes", zip: "", id: m[1] };
+  if ((m = hash.match(/^#\/z\/(\d{5})$/))) return { view: "dash", zip: m[1] };
+  if (hash === "#/search") return { view: "search" };
+  return { view: "home" };
+}
+
+async function loadMeta() {
+  metaCache = await fetch("/api/meta").then((res) => res.json());
+  $("cache-blurb").textContent = metaCache.vote_scope || "";
+  const gov = metaCache.governors || {};
+  const cross = metaCache.crosswalk || {};
+  $("sources").innerHTML =
+    `Members and term dates: unitedstates/congress-legislators YAML. ` +
+    `Districts: Census 119th Congressional District to 2020 ZCTA file` +
+    `${cross.zcta_count ? ` (${cross.zcta_count.toLocaleString()} ZCTAs, ${cross.multi_district_zcta_count.toLocaleString()} overlap more than one district)` : ""}. ` +
+    `Governors: Open States people${gov.commit ? `, commit ${esc(gov.commit).slice(0, 9)} dated ${esc(gov.commit_date)}` : ""}. ` +
+    `${esc(gov.excluded_note || "")} ` +
+    `Photos for members of Congress are hotlinked. Federal campaign figures are disclosed OpenFEC committee totals and Schedule A for one cycle, not career fundraising and not Schedule E. ` +
+    `OpenSecrets is not used.`;
+}
+
+async function renderDash(zip) {
+  show("dash");
+  $("dash-zip").textContent = zip;
+  $("dash-body").innerHTML = `<p class="meta">Looking up ${esc(zip)}…</p>`;
+  const res = await fetch("/api/zip/" + zip);
+  const data = await res.json();
+  if (!res.ok) {
+    $("dash-scope").textContent = data.error || "That ZIP code could not be looked up.";
+    $("dash-body").innerHTML = "";
+    return;
+  }
+  $("dash-scope").textContent = data.crosswalk.limitation;
+  const bits = [];
+  if (data.multi_district) bits.push("This ZCTA overlaps more than one congressional district. Every land overlap is listed.");
+  if (data.multi_state) bits.push("This ZCTA crosses a state line. Senators and the governor are listed for each state.");
+  if (data.water_only_overlaps) bits.push(`${data.water_only_overlaps} water-only overlap${data.water_only_overlaps === 1 ? "" : "s"} omitted.`);
+  $("dash-cross").textContent = bits.join(" ");
+  if (!data.ok) {
+    $("dash-body").innerHTML = `<p class="callout">${esc(data.reason)}</p>`;
+    return;
+  }
+  const extra = {
+    zip,
+    vote_scope: data.vote_scope,
+    funding: data.funding,
+    town_halls: data.town_halls,
+    disclosure_note: data.disclosure_note,
+  };
+  const house = data.house.map((person) => {
+    if (person.vacant) {
+      return `<article class="card" data-bioguide="${esc(person.bioguide || "")}"><h3>House seat not in the member file</h3><p>${esc(stateName(person.state))} · ${esc(person.census_name)}</p><p>${esc(shareLabel(person.land_share))}</p><p class="callout">${esc(person.note)}</p></article>`;
+    }
+    const share = shareLabel(person.land_share);
+    const note = person.district_code_note ? `<p class="fine">${esc(person.district_code_note)}</p>` : "";
+    return personCard(person, extra).replace("</article>", `${note}<p class="fine">${esc(share)}. Census name: ${esc(person.census_name)}.</p></article>`);
+  }).join("");
+  const senate = data.senate.map((person) => personCard(person, extra)).join("");
+  const governors = data.governors.map((person) => personCard(person, extra)).join("");
+  const notes = (data.jurisdiction_notes || []).map((note) => `<p class="callout">${esc(note)}</p>`).join("");
+  $("dash-body").innerHTML = `
+    ${notes}
+    <h3 class="section-label">U.S. House</h3>
+    <div class="cards">${house || `<p class="callout">No House district was returned for this ZCTA.</p>`}</div>
+    <h3 class="section-label">U.S. Senate</h3>
+    <div class="cards">${senate || `<p class="meta">No senators are listed for this ZIP. See the note above if this is a territory or the District of Columbia.</p>`}</div>
+    <h3 class="section-label">Governor</h3>
+    <div class="cards">${governors || `<p class="meta">No governor is loaded for this ZIP.</p>`}</div>
+    <p class="meta" style="margin-top:18px"><a href="#/search">Search every current member of Congress</a></p>`;
+}
+
+function plainNote(vote) {
+  const text = vote.plain_language || "Plain-language note unavailable";
+  const link = vote.plain_source_url
+    ? ` <a href="${esc(vote.plain_source_url)}">Source</a>`
+    : "";
+  return `<p class="plain-note">${esc(text)}${link}</p>`;
+}
+
+function voteTable(data) {
+  if (!data.votes.length) {
+    return `<p class="callout">${esc(data.note || "No votes in the cached roll calls matched this member.")}</p>`;
+  }
+  const rows = data.votes.map((vote) => {
+    const label = vote.chamber === "senate" ? `Senate ${vote.number}` : `House ${vote.number}`;
+    const when = `${fmtDate(vote.date)}${vote.time ? " · " + esc(vote.time) : ""}`;
+    return `<tr>
+      <td class="when">${when}<span class="result">${esc(label)}</span></td>
+      <td><div class="question">${esc(vote.question)}</div>${plainNote(vote)}<span class="result">${esc(vote.result)}</span>${lobbyHtml(vote.lobbying)}${whoDetails(vote.lobbying && vote.lobbying.bill_key, data.member && data.member.bioguide)}</td>
+      <td><span class="pill ${posClass(vote.position)}">${esc(vote.position)}</span></td>
+    </tr>`;
+  }).join("");
+  return `<p class="rule">${esc(matchCaption(data.votes))}</p>
+    <table><thead><tr><th>Date</th><th>Question</th><th>Vote</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+async function renderVotes(route) {
+  show("votes");
+  const detail = $("vote-detail");
+  const back = route.zip
+    ? `<p class="back"><a href="#/z/${esc(route.zip)}">Back to ${esc(route.zip)}</a></p>`
+    : `<p class="back"><a href="#/search">Back to member search</a></p>`;
+  detail.innerHTML = `${back}<p class="meta">Loading…</p>`;
+  const res = await fetch("/api/members/" + encodeURIComponent(route.id));
+  if (!res.ok) {
+    detail.innerHTML = `${back}<p class="err">That member was not found in the current Congress file.</p>`;
+    return;
+  }
+  const data = await res.json();
+  const member = data.member;
+  const party = `<span class="party party-${esc(member.party_code)}">${esc(member.party)}</span>`;
+  const place = [member.office_label, stateName(member.state), member.seat].filter(Boolean).join(" · ");
+  const phone = (member.phone || "").trim()
+    ? `<p class="meta">Office phone: ${esc(member.phone)}</p>`
+    : "";
+  const site = (member.url || "").trim()
+    ? `<p><a href="${esc(member.url)}" rel="noopener noreferrer">${esc(member.url.replace(/^https?:\/\//, ""))}</a></p>`
+    : "";
+  const next = member.reelection && member.reelection.next_up
+    ? `<p class="next-up">Next up for reelection: <strong>${esc(member.reelection.next_up)}</strong></p><p class="rule">${esc(member.reelection.rule)}</p>`
+    : "";
+  detail.innerHTML = `
+    ${back}
+    <div class="who">
+      ${photo(member, true)}
+      <div>
+        <h2>${esc(member.name)}</h2>
+        <p>${party}<br>${esc(place)}</p>
+        <p class="fine">Term in legislators-current.yaml: ${fmtDate(member.term_start)} – ${fmtDate(member.term_end)}</p>
+        ${phone}
+        ${site}
+      </div>
+    </div>
+    ${next}
+    ${frequencyHtml(member)}
+    <div id="stands-for">${standsForHtml(data.stands_for, member.bioguide)}</div>
+    ${billsHtml({sponsored: data.sponsored})}
+    ${donorIndustryHtml(data.donor_industry)}
+    ${financialDisclosuresHtml(data.financial_disclosures)}
+    <div class="callout" style="margin-top:16px">${esc(data.vote_scope)}</div>
+    <div class="votes-head" style="margin-top:18px"><h3 style="font-family:Georgia,Palatino,serif;font-weight:500">Cached roll calls <span class="meta">${data.vote_count}</span></h3></div>
+    ${voteTable(data)}
+    ${voteAside(data)}`;
+  if (!route.zip) {
+    document.querySelectorAll(".member-btn").forEach((btn) => {
+      btn.setAttribute("aria-current", btn.dataset.id === route.id ? "true" : "false");
+    });
+  }
+}
+
+async function loadMembers() {
+  const params = new URLSearchParams();
+  const q = $("q").value.trim();
+  const chamber = $("chamber").value;
+  const party = $("party").value;
+  const state = $("state").value;
+  if (q) params.set("q", q);
+  if (chamber) params.set("chamber", chamber);
+  if (party) params.set("party", party);
+  if (state) params.set("state", state);
+  const data = await fetch("/api/members?" + params.toString()).then((res) => res.json());
+  $("count").textContent = `${data.count} member${data.count === 1 ? "" : "s"}`;
+  const stateSelect = $("state");
+  if (stateSelect.options.length === 1 && !q && !chamber && !party && !state) {
+    const codes = [...new Set(data.members.map((member) => member.state))].sort();
+    for (const code of codes) {
+      const option = document.createElement("option");
+      option.value = code;
+      option.textContent = `${STATES[code] || code} (${code})`;
+      stateSelect.appendChild(option);
+    }
+  }
+  const selected = parseHash();
+  $("directory").innerHTML = data.members.map((member) => {
+    const current = selected.id === member.bioguide ? ' aria-current="true"' : "";
+    return `<button class="member-btn" type="button" role="listitem" data-id="${esc(member.bioguide)}"${current}>
+      ${photo(member, false)}
+      <span><strong>${esc(member.name)}</strong>
+      <span class="meta"><span class="party party-${esc(member.party_code)}">${esc(member.party)}</span> · ${esc(member.office_label)} · ${esc(stateName(member.state))} · ${esc(member.seat)}</span></span>
+    </button>`;
+  }).join("") || `<p class="meta" style="padding:12px">No members match those filters.</p>`;
+}
+
+function route() {
+  const parsed = parseHash();
+  if (parsed.view === "home") { show("home"); return; }
+  if (parsed.view === "dash") { renderDash(parsed.zip).catch(showError); return; }
+  if (parsed.view === "votes") {
+    if (!searchLoaded && !parsed.zip) {
+      show("search");
+      loadMembers().then(() => renderVotes(parsed)).catch(showError);
+      searchLoaded = true;
+      return;
+    }
+    renderVotes(parsed).catch(showError);
+    return;
+  }
+  show("search");
+  if (!searchLoaded) {
+    loadMembers().catch(showError);
+    searchLoaded = true;
+  }
+}
+
+function showError(err) {
+  console.error(err);
+  const home = $("home-error");
+  if (home) home.textContent = "Something went wrong loading that page.";
+}
+
+$("zip-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const raw = $("zip-input").value.trim();
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length < 5) {
+    $("home-error").textContent = "Enter a 5-digit US ZIP code.";
+    return;
+  }
+  $("home-error").textContent = "";
+  location.hash = "#/z/" + digits.slice(0, 5);
+});
+$("filters").addEventListener("input", () => { loadMembers().catch(showError); });
+$("filters").addEventListener("submit", (event) => event.preventDefault());
+$("directory").addEventListener("click", (event) => {
+  const btn = event.target.closest(".member-btn");
+  if (!btn) return;
+  currentId = btn.dataset.id;
+  location.hash = "#/m/" + btn.dataset.id;
+});
+window.addEventListener("hashchange", route);
+const params = new URLSearchParams(location.search);
+if (!location.hash && params.get("zip")) {
+  location.hash = "#/z/" + params.get("zip").replace(/\D/g, "").slice(0, 5);
+}
+loadMeta().catch(showError);
+route();
+
+// Front-page rankings: plain records, no scoring, no party colors.
+function rkTable(rows, chamber) {
+  if (!rows.length) return `<p class="meta">No members with data.</p>`;
+  const money = (n) => n == null ? "—" : "$" + Math.round(n).toLocaleString();
+  const body = rows.map((r) => `<tr><td class="num">${r.rank}</td><td><a href="${esc(r.link)}">${esc(r.name)}</a><span class="rk-cyc">Cycle ${esc(r.cycle || "")}${r.cycle_fallback && chamber === "house" ? "*" : ""}</span></td>
+    <td>${esc(r.party)}-${esc(r.state)}${chamber === "house" && r.district != null ? "-" + esc(String(r.district) === "0" ? "AL" : r.district) : ""}</td>
+    <td class="num">${money(r.dollars)}</td><td class="num">${r.percent == null ? "—" : r.percent.toFixed(1) + "%"}</td>
+    <td class="rk-cycol">${esc(r.cycle || "")}${r.cycle_fallback && chamber === "house" ? "*" : ""}</td></tr>`).join("");
+  return `<div class="rk-scroll"><table><thead><tr><th class="num">#</th><th>Member</th><th>Party-state</th><th class="num">Dollars</th><th class="num">% of receipts</th><th class="rk-cycol">Cycle</th></tr></thead><tbody>${body}</tbody></table></div>`;
+}
+async function loadRankings() {
+  try {
+    const d = await fetch("/api/rankings").then((r) => r.json());
+    const part = (key, label) => {
+      const c = d.chambers[key];
+      const fbNote = key === "house"
+        ? `${c.cycle_fallbacks} use the most recent completed election cycle (marked *) because the current cycle had too little data. `
+        : key === "senate_current"
+          ? `${c.excluded_other_cycle} senators whose donor data comes from their last full campaign are listed in the next section instead. `
+          : `${c.excluded_other_cycle} senators with 2026-cycle donor data are listed in the section above instead. Each row's cycle is its own most recent completed election; cycles are never combined within a row. `;
+      return `<h3 class="section-label">${label}: top ${c.limit}</h3>
+      <div class="rk-pair">
+        <div><h4>Most money from donors whose employers lobbied on their bills</h4>${rkTable(c.by_dollars, key)}</div>
+        <div><h4>Highest share of money raised from donors whose employers lobbied on their bills</h4>${rkTable(c.by_percent, key)}</div>
+      </div>
+      <p class="fine">Coverage: ${c.with_data} of ${c.members_total} current members are ranked here. ${c.excluded_no_data} with no cached donor-industry data are left out. ${fbNote}${c.with_percent} have total receipts for the same cycle; ${c.excluded_from_percent} without them are left out of the percent list.</p>`;
+    };
+    $("rk-status").textContent = d.caption;
+    $("rk-body").innerHTML = part("house", "U.S. House") + part("senate_current", "U.S. Senate, this cycle (2026)") + part("senate_completed", "U.S. Senate, last full campaign (2020, 2022 or 2024)") +
+      `<p class="fine">${esc(d.method)} ${esc(d.percent_method)} Click a name for that member's records. Caches: lobbying ${esc(d.cache.lobbying || "?")}, donor industries ${esc(d.cache.donor_industry || "?")}, finance ${esc(d.cache.finance || "?")}.</p>`;
+  } catch (e) { $("rk-status").textContent = "Rankings could not be loaded."; }
+}
+loadRankings();
+</script>
+</body>
+</html>
