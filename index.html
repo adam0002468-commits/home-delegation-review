@@ -30,7 +30,7 @@
   async function route(u) {
     const p = u.pathname, q = u.searchParams;
     if (p === "/api/meta") return json(await getJSON("meta.json"));
-    if (p === "/api/rankings") return json(await getJSON("rankings.json"));
+    if (p === "/api/rankings") return json({ removed: true, note: "Member rankings were removed." }, 410);
     if (p === "/api/members") {
       members = members || (await getJSON("members.json")).members;
       const text = (q.get("q") || "").trim().toLowerCase(), ch = (q.get("chamber") || "").trim().toLowerCase(),
@@ -73,7 +73,6 @@
   };
 })();
 </script>
-
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Home Delegation</title>
@@ -217,9 +216,8 @@
   }
   .meta { color: var(--muted); font-size: 14px; }
   .party { font-weight: 650; }
-  .party-D { color: #1d4e89; }
-  .party-R { color: #8e2e2e; }
-  .party-I { color: #5c5346; }
+  /* Neutral: no party red/blue. The party is always spelled out in text. */
+  .party-D, .party-R, .party-I { color: inherit; }
   .next-up { margin: 12px 0 4px; font-size: 17px; }
   .rule, .fine {
     margin: 0;
@@ -333,8 +331,9 @@
     font-weight: 650;
     white-space: nowrap;
   }
-  .pos-yes { background: #e3f0e7; color: #145c38; }
-  .pos-no { background: #f8e6e3; color: #8a2c2c; }
+  /* Neutral vote badges: no green/red good-bad pair; the word (Yea/Nay) carries the meaning. */
+  .pos-yes { background: #eceff2; color: #2f3a45; border: 1px solid #2f3a45; }
+  .pos-no { background: #ffffff; color: #2f3a45; border: 1px dashed #2f3a45; }
   .pos-other { background: #eeeae2; color: #514c44; }
   .result { color: var(--muted); font-size: 13px; display: block; margin-top: 2px; }
   footer {
@@ -395,6 +394,35 @@
   /* What they stand for: neutral styling only, no good/bad colors. */
   .fd-list { margin: 0 0 10px; padding-left: 18px; }
   .fd-list li { margin: 4px 0; }
+  .said .sv-match { border-top: 1px solid var(--line); padding: 8px 0; font-size: 13.5px; }
+  .said .sv-bill { font-weight: 600; }
+  .said .sv-how { display: inline-block; font-size: 11.5px; border: 1px solid var(--line); padding: 0 5px; margin-left: 6px; color: var(--muted); font-weight: 400; }
+  .said .sv-pos { display: inline-block; min-width: 70px; font-weight: 700; border: 1px solid var(--line); padding: 0 6px; margin-right: 6px; }
+  .said ol.sv-rolls { list-style: none; margin: 4px 0; padding: 0; }
+  .said ol.sv-rolls > li { padding: 3px 0; }
+  .said blockquote.sv-post { margin: 6px 0 2px; padding: 6px 10px; border-left: 3px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13.5px; }
+  .said .sv-meta { color: var(--muted); font-size: 12.5px; }
+  /* Post cards: our own markup, styled to read as a social post (no X logo, icons, or embed scripts). */
+  .said .xp { white-space: normal; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #fff; color: #0f1419; border: 1px solid #d6dbe0; border-radius: 12px; padding: 12px 14px; margin: 6px 0 4px; max-width: 600px; }
+  .said .xp-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .said .xp-av { width: 40px; height: 40px; border-radius: 50%; flex: 0 0 40px; object-fit: cover; background: #e6e9ec; }
+  .said .xp-ini { display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; color: #536471; }
+  .said .xp-who { min-width: 0; line-height: 1.3; }
+  .said .xp-name { font-weight: 700; font-size: 15px; overflow-wrap: anywhere; }
+  .said .xp-sub { color: #536471; font-size: 13.5px; overflow-wrap: anywhere; }
+  .said .xp-gov { color: #6b7780; font-size: 12px; border: 1px solid #d6dbe0; border-radius: 4px; padding: 0 5px; margin-left: 4px; white-space: nowrap; }
+  .said .xp-tag { display: inline-block; margin-top: 8px; color: #536471; font-size: 12px; background: #f2f4f5; border-radius: 4px; padding: 1px 6px; }
+  .said .xp-text { margin: 8px 0 0; font-size: 15px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .said .xp-text a { color: #1d6fa5; }
+  .said .xp-foot { margin-top: 10px; color: #536471; font-size: 13px; display: flex; flex-wrap: wrap; gap: 4px 10px; }
+  .said .xp-foot a { color: #1d6fa5; }
+  .said ul.sv-recent.xp-list > li { border-top: 0; padding: 2px 0; }
+  @media (max-width: 480px) { .said .xp { padding: 10px 12px; } .said .xp-text { font-size: 14.5px; } }
+  .said ul.sv-recent { list-style: none; padding: 0; margin: 4px 0; }
+  .said ul.sv-recent > li { border-top: 1px dashed var(--line); padding: 6px 0; }
+  .said details.sv-topic > summary { cursor: pointer; font-size: 14px; padding: 3px 0; }
+  .said h4 { font-size: 14px; margin: 12px 0 4px; }
   .stands .topic { border-top: 1px solid var(--line); padding: 4px 0; }
   .stands .topic > summary { cursor: pointer; font-size: 14px; padding: 4px 0; }
   .stands .topic > summary .t-name { font-weight: 600; }
@@ -467,8 +495,6 @@
 </style>
 </head>
 <body>
-<div role="note" style="background:#fff3c4;color:#3a2e00;border-bottom:2px solid #c9a227;padding:8px 14px;font:600 14px/1.4 system-ui,sans-serif;text-align:center">Read-only snapshot for review, data as of 2026-10-15.</div>
-
 <header class="mast">
   <div class="mast-inner">
     <div>
@@ -490,7 +516,7 @@
       <li>Know everyone on my ballot, not just the names I recognize.</li>
       <li>Follow the money: who funds each candidate, and who lobbies on the bills they touch.</li>
       <li>Judge them by their votes, not their ads.</li>
-      <li>Watch for conflicts of interest, and stay skeptical but fair. Money and votes lining up isn't proof of a deal, but it's worth asking about.</li>
+      <li>Read the money and lobbying records with care, and stay skeptical but fair. Money and votes lining up isn't proof of a deal.</li>
       <li>Show up: call their office, go to town halls, and vote in every election, primaries included.</li>
     </ul>
     <p class="civic-note">Everything here comes from public records, including the FEC, Congress, and Senate lobbying disclosures. We show only what's disclosed, say when data is missing, and never score anyone.</p>
@@ -504,11 +530,6 @@
     <button class="primary" type="submit" style="align-self:end">Look up</button>
   </form>
   <p class="meta" id="home-error" role="status"></p>
-  <section class="rankings" id="rankings" aria-labelledby="rankings-title">
-    <h2 id="rankings-title">Donors whose employers lobbied on members' bills</h2>
-    <p class="meta" id="rk-status">Loading…</p>
-    <div id="rk-body"></div>
-  </section>
 </section>
 
 <section class="wrap" id="view-dash" hidden>
@@ -739,8 +760,8 @@ function votesChartHtml(person) {
   const size = Math.max(vf.set_size || 0, vf.in_cache);
   const noRecord = Math.max(0, size - vf.in_cache);
   const segs = [
-    {label: "Yea or Aye", short: "Yea", value: vf.yea, color: CHART_COLORS.green},
-    {label: "Nay or No", short: "Nay", value: vf.nay, color: CHART_COLORS.orange},
+    {label: "Yea or Aye", short: "Yea", value: vf.yea, color: "#4f5f6f"},
+    {label: "Nay or No", short: "Nay", value: vf.nay, color: "#a9b4be"},
     {label: "Not Voting", short: "NV", value: vf.not_voting, color: CHART_COLORS.gray},
     {label: "Present or other", short: "Other", value: vf.other, color: CHART_COLORS.purple},
     {label: "No record for this member in the set", short: "None", value: noRecord, color: "#efeae1"},
@@ -750,11 +771,11 @@ function votesChartHtml(person) {
   let party = "";
   if (vf.party_compare) {
     const share = vf.party_match / vf.party_compare;
-    const plural = {Democrat: "Democratic", Republican: "Republican", Independent: "Independent"}[person.party] || "party";
+    const plural = vf.party_label ? vf.party_label.replace(/ majority.*$/, "") : ({Democrat: "Democratic", Republican: "Republican", Independent: "Independent"}[person.party] || "party");
     const label = `Matched the ${plural} majority on ${vf.party_match} of ${vf.party_compare} Yea/Nay votes (${pct(share, 0)})`;
     party = `${stackedBarSvg([{label, short: "Matched", inShort: pct(share, 0), inLong: `Matched ${pct(share, 0)}`, value: vf.party_match, color: CHART_COLORS.pine, dark: true, text: label}],
       vf.party_compare, {height: 18, trackRest: true, title: "Party-line agreement", desc: label + "."})}
-      <p class="chart-cap">${esc(label)}. Only votes where the member voted Yea or Nay and the party had a Yea or Nay majority are compared.</p>`;
+      <p class="chart-cap">${esc(label)}. Only votes where the member voted Yea or Nay and the party had a Yea or Nay majority are compared${vf.party_voting_avg ? `; on average ${esc(vf.party_voting_avg)} members of that party voted Yea or Nay on each` : ""}.${vf.party_label && /caucuses/.test(vf.party_label) ? " " + esc(vf.party_label) + "." : ""}</p>`;
   } else {
     party = `<p class="chart-cap">No Yea/Nay votes with a party majority to compare in this set.</p>`;
   }
@@ -839,16 +860,16 @@ function financialDisclosuresHtml(fd) {
   const cap = `<p class="chart-cap">${esc(fd.caption || "")}</p>`;
   const scope = fd.cache_date ? `<p class="fine">House Clerk index as of ${esc(fd.cache_date)}.</p>` : "";
   if (fd.chamber === "senate" || fd.status === "senate_not_indexed") {
-    return `<div class="block"><strong>Conflicts of interest (financial disclosures)</strong>
+    return `<div class="block"><strong>Financial disclosures</strong>
       <p>${esc(fd.note || "Senate filings are not listed yet.")}</p>
       <p class="fine">Senate source: <a href="https://efdsearch.senate.gov/" target="_blank" rel="noopener">efdsearch.senate.gov</a></p>
       ${cap}</div>`;
   }
   if (fd.applies === false) {
-    return `<div class="block"><strong>Conflicts of interest (financial disclosures)</strong><p>${esc(fd.note || "Not applicable.")}</p>${cap}</div>`;
+    return `<div class="block"><strong>Financial disclosures</strong><p>${esc(fd.note || "Not applicable.")}</p>${cap}</div>`;
   }
   if (!fd.loaded) {
-    return `<div class="block"><strong>Conflicts of interest (financial disclosures)</strong>
+    return `<div class="block"><strong>Financial disclosures</strong>
       <p>${esc(fd.note || "No matched House Clerk filing in the cached index.")}</p>
       ${scope}${cap}
       <p class="fine">Browse the Clerk index: <a href="https://disclosures-clerk.house.gov/" target="_blank" rel="noopener">disclosures-clerk.house.gov</a></p>
@@ -864,7 +885,7 @@ function financialDisclosuresHtml(fd) {
   if (ptr.length) body += `<p class="fine">Periodic transaction reports (stock and other trades)</p><ul class="fd-list">${ptr.map(row).join("")}</ul>`;
   if (other.length) body += `<details><summary class="fine">Other Clerk filings (${other.length})</summary><ul class="fd-list">${other.map(row).join("")}</ul></details>`;
   if (!body) body = `<p>${esc(fd.note || "No filings listed.")}</p>`;
-  return `<div class="block"><strong>Conflicts of interest (financial disclosures)</strong>
+  return `<div class="block"><strong>Financial disclosures</strong>
     ${body}
     ${scope}${cap}
     <p class="fine">Source: House Clerk financial disclosure PDFs. Links open the official file. Holdings are not copied into this app.</p>
@@ -876,7 +897,9 @@ function donorIndustryHtml(d) {
   const committee = d.committee
     ? `${esc(d.committee.name || "")} (${esc(d.committee.id || "")})`
     : "no principal campaign committee on file";
-  const scope = `<p class="fine">Cycle: <strong>${esc(d.cycle || "not set")}</strong> two-year period · Committee: ${committee}${d.cache_date ? ` · OpenFEC data as of ${esc(d.cache_date)}` : ""}.</p>`;
+  const cyc = d.loaded && d.cycle_label ? d.cycle_label : (d.cycle ? `${d.cycle} two-year period` : "not set");
+  const periodNote = d.cycle_fields && d.cycle_fields.calendar_period_note ? ` ${esc(d.cycle_fields.calendar_period_note)}` : "";
+  const scope = `<p class="fine">Cycle: <strong>${esc(cyc)}</strong> · Committee: ${committee}${d.cache_date ? ` · OpenFEC data as of ${esc(d.cache_date)}` : ""}.${periodNote}</p>`;
   const cap = `<p class="chart-cap">${esc(d.caption || DONOR_CAPTION)}</p>`;
   const cycleNote = d.cycle_note
     ? `<p class="di-cycle"><strong>${esc(d.cycle_note)}</strong></p>`
@@ -898,7 +921,7 @@ function donorIndustryHtml(d) {
   return `<div class="block"><strong>Where the donor money works</strong>
     ${cycleNote}
     <div class="chart">
-      <p class="chart-title">Top employers of itemized donors, ${esc(d.cycle)} cycle</p>
+      <p class="chart-title">Top employers of itemized donors, ${esc(d.cycle)} cycle${d.shown === "completed_cycle" ? ` (fallback: completed cycle, not the current ${esc(d.current_cycle || "")} cycle)` : ""}</p>
       ${emps}
       <p class="chart-cap">Ranked by dollars from donors who named that employer. Count is the number of itemized contributions the FEC aggregated, not unique people. Retired, not employed, self-employed, homemaker/student, and blank entries are not employers and are left out of this list (${esc(usd0(d.top_employers.left_out_status_amount || 0))}). Spellings are combined when they differ by INC/LLC/LLP/CORP/CO or a leading “The”, or when one name is a shorter form of another (Proskauer, Proskauer Rose LLP) and both fall in the same classified industry.</p>
     </div>
@@ -920,7 +943,8 @@ function donorList(rows) {
     <li>
       <span class="donor-name">${esc(row.name)} <span class="donor-kind">${esc(row.type || "")}</span></span>
       <span class="donor-amt">${esc(usd(row.amount))}</span>
-    </li>`).join("")}</ol>`;
+    </li>`).join("")}</ol>
+    <p class="fine">Grouped by the contributor name exactly as filed. One name can be more than one person (people who share a name), and one person can appear under different spellings.</p>`;
 }
 function townHallBlock(halls) {
   halls = halls || {};
@@ -952,11 +976,13 @@ function financeHtml(person, extra) {
   const committeeLine = committee
     ? `<p>${esc(committee.designation || "Principal campaign committee")}: <strong>${esc(committee.name)}</strong> (${esc(committee.id)})</p>`
     : "";
+  const fcf = finance.cycle_fields || {};
   const cycleLine = finance.cycle
-    ? `<p>Two-year cycle: <strong>${esc(finance.cycle)}</strong></p><p class="fine">${esc(finance.cycle_rule || "")}</p>`
+    ? `<p>Two-year cycle: <strong>${esc(finance.cycle_label && fcf.display_cycle ? finance.cycle_label : finance.cycle)}</strong></p><p class="fine">${esc(finance.cycle_rule || "")}${fcf.calendar_period_note ? " " + esc(fcf.calendar_period_note) : ""}</p>`
     : "";
   let body = "";
-  if (finance.error) body += `<p>${esc(finance.error)}</p>`;
+  if (finance.empty_state) body += `<p><strong>${esc(finance.empty_state)}</strong></p>`;
+  if (finance.error) body += `<p class="fine">${esc(finance.error)}</p>`;
   const totals = (finance.totals && finance.totals.figures) || [];
   if (totals.length) {
     const coverStart = finance.totals.coverage_start;
@@ -1110,10 +1136,14 @@ function standsPos(v) {
   if (v.side === "not_voting") return "Not voting";
   return v.position || "Other";
 }
+function majCount(v) {
+  const c = v.party_majority_counts;
+  return c && c.voting ? `, ${c.yes} Yea–${c.no} Nay of ${c.voting} voting` : "";
+}
 function standsPartyLine(v, label) {
-  if (v.side === "not_voting") return `Did not vote. ${esc(label)}: ${esc(v.party_majority || "no majority (tie)")}.`;
-  if (v.with_party === true) return `Voted with the ${esc(label)} (${esc(v.party_majority)}).`;
-  if (v.with_party === false) return `Voted against the ${esc(label)} (${esc(v.party_majority)}).`;
+  if (v.side === "not_voting") return `Did not vote. ${esc(label)}: ${esc(v.party_majority || "no majority (tie)")}${esc(majCount(v))}.`;
+  if (v.with_party === true) return `Voted with the ${esc(label)} (${esc(v.party_majority)}${esc(majCount(v))}).`;
+  if (v.with_party === false) return `Voted against the ${esc(label)} (${esc(v.party_majority)}${esc(majCount(v))}).`;
   if (!v.party_majority) return `No party majority to compare (tie or no Yea/Nay votes in the party).`;
   return `Recorded “${esc(v.position)}”; not compared with the ${esc(label)} (${esc(v.party_majority)}).`;
 }
@@ -1128,7 +1158,7 @@ function standsVoteRows(topic, sf) {
       : `<span class="tv-tag" title="${esc(sf.factual_flag || "")}">Not yet summarized</span>`;
     const src = v.plain_source_url ? ` <a href="${esc(v.plain_source_url)}" rel="noopener noreferrer">Source</a>` : "";
     const recorded = standsPos(v).toLowerCase() !== String(v.position || "").toLowerCase() ? ` (recorded “${esc(v.position)}”)` : "";
-    return `<li><span class="tv-pos">${esc(standsPos(v))}</span><span class="tv-meta">${recorded ? recorded + " · " : ""}${fmtDate(v.date)} · <a href="${esc(v.source_url)}" rel="noopener noreferrer">${where}</a> · ${esc(v.result)}</span>
+    return `<li><span class="tv-pos">${esc(standsPos(v))}</span><span class="tv-meta">${recorded ? recorded + " · " : ""}${fmtDate(v.date)} · <a href="${esc(v.source_url)}" rel="noopener noreferrer">${where}</a> · ${esc(v.result)}${tieNote(v)}</span>
       <div class="question">${esc(v.question)}</div>${bill}
       <p class="plain-note">${esc(v.plain_language)}${tag}${src}</p>
       <div class="tv-meta">${standsPartyLine(v, sf.party_label || "party majority")}</div>${whoDetails(v.bill_key, sf.bioguide)}</li>`;
@@ -1153,6 +1183,102 @@ function standsForHtml(sf, bioguide) {
       <summary><span class="t-name">${esc(t.topic)}</span> <span class="t-counts">${esc(standsCounts(t))}</span></summary>
       <div class="topic-body">${t.votes ? standsVoteRows(t, sf) : `<p class="meta">Opening…</p>`}</div></details>`).join("");
   return `<div class="block stands">${head}${scope}${unsum}<p class="fine">Topics are sorted by number of votes. Open a topic to see each vote.</p>${topics}</div>`;
+}
+
+// ---------- What they said vs. how they voted (public X posts; text is untrusted, always escaped) ----------
+const SAID_CAPTION = "Posts are shown as written. A post is matched to a vote only when it names the bill number or the bill's official title. A post can mention a bill for many reasons.";
+const XP_URL = /(https?:\/\/[^\s<>"']+)/g;
+function xpLinkify(text) {
+  // Escape every piece; only http(s) URLs become links. Line breaks are kept by CSS (pre-wrap).
+  return String(text || "").split(XP_URL).map((part, i) => i % 2
+    ? `<a href="${esc(part)}" rel="noopener noreferrer nofollow ugc">${esc(part)}</a>` : esc(part)).join("");
+}
+function xpInitials(name, handle) {
+  const words = String(name || "").replace(/^(Rep|Sen|Senator|Congressman|Congresswoman|Dr|Leader|Speaker|Whip)\.?\s+/i, "").split(/\s+/).filter((w) => /^[A-Za-z]/.test(w));
+  const ini = words.length ? (words[0][0] + (words.length > 1 ? words[words.length - 1][0] : "")) : String(handle || "?").slice(0, 2);
+  return ini.toUpperCase();
+}
+function xpCardHtml(p, a) {
+  const name = a.name || "@" + a.handle;
+  const ini = `<span class="xp-av xp-ini" aria-hidden="true">${esc(xpInitials(a.name, a.handle))}</span>`;
+  const av = a.avatar
+    ? `<img class="xp-av" src="${esc(a.avatar)}" alt="" width="40" height="40" decoding="async" data-ini="${esc(xpInitials(a.name, a.handle))}">`
+    : ini;
+  const gov = a.government ? `<span class="xp-gov">Government account</span>` : "";
+  const tag = p.is_quote ? `<span class="xp-tag">Quote post</span>` : (p.is_reply ? `<span class="xp-tag">Reply</span>` : "");
+  return `<article class="xp"><header class="xp-head">${av}<div class="xp-who"><div class="xp-name">${esc(name)}</div><div class="xp-sub">@${esc(a.handle)}${gov}</div></div></header>${tag}<div class="xp-text">${xpLinkify(p.text).trim()}</div><div class="xp-foot"><time datetime="${esc(p.created_at || "")}">${esc(p.when_et)}</time><a href="${esc(p.url)}" rel="noopener noreferrer nofollow">View on X</a></div></article>`;
+}
+// Local photo failed to load: swap in the initials circle.
+document.addEventListener("error", (e) => {
+  const img = e.target;
+  if (img instanceof HTMLImageElement && img.classList.contains("xp-av")) {
+    const s = document.createElement("span"); s.className = "xp-av xp-ini"; s.setAttribute("aria-hidden", "true");
+    s.textContent = img.dataset.ini || "?"; img.replaceWith(s);
+  }
+}, true);
+function svPostHtml(p, a) {
+  if (a && a.handle) return xpCardHtml(p, a);   // server sends account info (new server.py); else original markup
+  const kind = p.is_reply ? " · reply" : (p.is_quote ? " · quote post" : "");
+  return `<blockquote class="sv-post">${esc(p.text)}</blockquote>
+    <div class="sv-meta">${esc(p.when_et)}${kind} · <a href="${esc(p.url)}" rel="noopener noreferrer nofollow">View on X</a></div>`;
+}
+function tieNote(v) {
+  const t = v && v.tie_breaker;
+  return t ? ` · Tie broken by the ${esc(t.by_whom || "presiding officer")}, voting ${esc(t.vote || "")}` : "";
+}
+function svRollHtml(r) {
+  const where = `${r.chamber === "senate" ? "Senate vote" : "House roll"} ${esc(r.number)}`;
+  const src = r.plain_source_url ? ` <a href="${esc(r.plain_source_url)}" rel="noopener noreferrer">Source</a>` : "";
+  const tag = r.summarized ? "" : ` <span class="tv-tag">Not yet summarized</span>`;
+  return `<li><span class="sv-pos">${esc(r.position)}</span><span class="sv-meta">${fmtDate(r.date)} · <a href="${esc(r.source_url)}" rel="noopener noreferrer">${where}</a> · ${esc(r.result)}${tieNote(r)}</span>
+    <div class="question">${esc(r.question)}</div><p class="plain-note">${esc(r.plain_language)}${tag}${src}</p></li>`;
+}
+function svMatchHtml(m, a) {
+  const bill = m.bill_url ? `<a href="${esc(m.bill_url)}" rel="noopener noreferrer">${esc(m.bill)}</a>` : esc(m.bill);
+  const title = m.bill_title ? ` — ${esc(m.bill_title)}` : "";
+  const shown = m.roll_calls.slice(0, 3), rest = m.roll_calls.slice(3);
+  const rolls = m.roll_calls.length
+    ? `<div class="sv-meta">Recorded vote${m.roll_calls.length === 1 ? "" : "s"} by this member on this bill:</div><ol class="sv-rolls">${shown.map(svRollHtml).join("")}</ol>${rest.length ? `<details><summary class="sv-meta">${rest.length} more roll call${rest.length === 1 ? "" : "s"} on this bill</summary><ol class="sv-rolls">${rest.map(svRollHtml).join("")}</ol></details>` : ""}`
+    : `<div class="sv-meta">No roll call on this bill in the cached session votes.</div>`;
+  const spons = m.sponsored ? `<div class="sv-meta">This member is listed as the sponsor of this bill (Congress.gov).</div>` : "";
+  return `<div class="sv-match"><div class="sv-bill"><span class="sv-how">Possible reference:</span> ${bill}${title}<span class="sv-how">${esc(m.method_label)}</span></div>
+    <div class="sv-meta">Matched by text only (a bill number or title in the post, assumed to be this Congress). Read the post and its date before treating it as about this bill; a match says nothing about agreement or disagreement.</div>
+    ${spons}${rolls}<div class="sv-meta">The post:</div>${svPostHtml(m.post, a)}</div>`;
+}
+// Account substitution (data/x_handle_overrides.json): one rule for every member. Used only when the
+// listed account no longer exists on X or has no posts, and only for an account with X's government label
+// whose bio names the member or their office.
+function svProvenance(sv) {
+  if (sv.override && sv.override.card_note) return sv.override.card_note;
+  const listed = sv.listed_handle || "", shown = sv.handle || "";
+  if (!listed || !shown || listed.toLowerCase() === shown.toLowerCase()) return "";
+  return `Posts from @${shown}. The account listed in the public congress-legislators dataset (@${listed}) no longer exists on X, has no posts, or belongs to a different office; this account carries X's government label and its bio names the member or their office.`;
+}
+function svOverrideBio(o) {
+  if (!o || !o.bio) return "";
+  const when = o.checked_at ? ` when checked on ${fmtDate(o.checked_at.slice(0, 10))}` : "";
+  return `<p class="fine">Profile bio of @${esc(o.override_handle)}${when}, as written: “${esc(o.bio)}”</p>`;
+}
+function saidVotedHtml(sv) {
+  if (!sv) return "";
+  const head = `<strong>What they said vs. how they voted</strong><p class="chart-cap">${esc(sv.caption || SAID_CAPTION)}</p>`;
+  if (!sv.loaded) return `<div class="block said">${head}<p>${esc(sv.note || "No posts in the local cache.")}</p>${svOverrideBio(sv.override)}</div>`;
+  const prov = svProvenance(sv);
+  const acct = prov
+    ? `<p class="fine sv-override">${esc(prov)}</p>${svOverrideBio(sv.override)}<p class="fine">Account: <a href="${esc(sv.profile_url)}" rel="noopener noreferrer nofollow">@${esc(sv.handle)}</a>. Newest ${esc(sv.post_count)} original posts (reposts excluded), fetched ${esc(sv.fetched_at || "")}.${sv.overrides_url ? ` <a href="${esc(sv.overrides_url)}">List of account substitutions</a>.` : ""}</p>`
+    : `<p class="fine">Account: <a href="${esc(sv.profile_url)}" rel="noopener noreferrer nofollow">@${esc(sv.handle)}</a>, as listed in the public <a href="${esc(sv.handles_source)}" rel="noopener noreferrer">congress-legislators social-media file</a>. Newest ${esc(sv.post_count)} original posts (reposts excluded), fetched ${esc(sv.fetched_at || "")}.</p>`;
+  if (!sv.post_count) return `<div class="block said">${head}${acct}<p>${esc(sv.note || "No recent posts.")}</p></div>`;
+  const mc = sv.match_counts || {};
+  const matches = sv.matches.length
+    ? `<p class="fine">${esc(sv.matches.length)} possible post-to-bill reference${sv.matches.length === 1 ? "" : "s"} (${esc(mc.number || 0)} name a bill number, ${esc(mc.title || 0)} name a bill title). These are text matches, not confirmed references.</p>${sv.matches.map((m) => svMatchHtml(m, sv.account)).join("")}`
+    : `<p class="fine">None of these ${esc(sv.post_count)} posts names the number or official title of a bill this member voted on in the cached roll calls or sponsored.</p>`;
+  const xl = sv.account ? " xp-list" : "";
+  const recent = `<h4>Recent posts</h4><ul class="sv-recent${xl}">${sv.recent.map((p) => `<li>${svPostHtml(p, sv.account)}</li>`).join("")}</ul>`;
+  const byId = Object.fromEntries(sv.posts.map((p) => [p.id, p]));
+  const groups = (sv.topic_groups || []).map((g) => `<details class="sv-topic"><summary><span class="t-name">${esc(g.topic)}</span> <span class="t-counts">${esc(g.post_ids.length)} post${g.post_ids.length === 1 ? "" : "s"}</span></summary>
+      <ul class="sv-recent${xl}">${g.post_ids.map((id) => byId[id]).filter(Boolean).map((p) => `<li>${svPostHtml(p, sv.account)}${p.topics && p.topics.length ? `<div class="sv-meta">Keyword${p.topics.length > 1 ? "s" : ""} matched: ${esc(p.topics.map((t) => t.topic + ": " + t.keywords.join(", ")).join(" · "))}</div>` : ""}</li>`).join("")}</ul></details>`).join("");
+  const topics = `<h4>Recent posts by topic</h4><p class="chart-cap">${esc(sv.topic_caption || "")} <a href="${esc(sv.rules_url || "/x_topic_rules.json")}">Keyword rules</a>.</p>${groups}`;
+  return `<div class="block said">${head}${acct}${matches}${recent}${topics}</div>`;
 }
 document.addEventListener("toggle", async (event) => {
   const el = event.target;
@@ -1496,7 +1622,7 @@ new MutationObserver(() => {
   for (const id of ["dash-body", "vote-detail"]) glossify(document.getElementById(id));
   document.querySelectorAll(".card, .who-body, .topic-body").forEach((el) => glossify(el));
 }).observe(document.body, {childList: true, subtree: true});
-// ---------- Potential conflicts of interest (cached facts only; no score, no flags) ----------
+// ---------- Donor, lobbying and financial-disclosure records (cached facts only; no score, no flags, no ranking) ----------
 function conflictsHtml(person) {
   const c = person.conflicts;
   if (!c) return financialDisclosuresHtml(person.financial_disclosures);
@@ -1544,7 +1670,7 @@ function conflictsHtml(person) {
       ${ptr.length ? `<ul class="fd-list">${ptr.map(row).join("")}</ul>` : `<p class="fine">None in the cached House Clerk index.</p>`}
       <p class="fine">House Clerk index as of ${esc(fd.cache_date || "")}. Links open the official PDFs.</p>`;
   }
-  return `<div class="block conflicts"><strong>Potential conflicts of interest</strong>
+  return `<div class="block conflicts"><strong>Donor, lobbying and financial-disclosure records</strong>
     <div class="cf-part">${partA}</div>
     <div class="cf-part"><p class="cf-h">Donor-lobby overlap${o.cycle ? `, ${esc(o.cycle)} cycle` : ""}</p>${partB}</div>
     <div class="cf-part"><p class="cf-h">Financial disclosures</p>${partC}</div>
@@ -1593,6 +1719,7 @@ function personCard(person, extra) {
     ${conflictsHtml(person)}
     ${frequencyHtml(person)}
     ${person.stands_for ? standsForHtml(person.stands_for, person.bioguide) : ""}
+    ${person.said_voted ? saidVotedHtml(person.said_voted) : ""}
     ${billsHtml(person)}
     ${runningHtml(person)}
     ${financeHtml(person, extra)}
@@ -1750,6 +1877,7 @@ async function renderVotes(route) {
     ${next}
     ${frequencyHtml(member)}
     <div id="stands-for">${standsForHtml(data.stands_for, member.bioguide)}</div>
+    ${saidVotedHtml(data.said_voted)}
     ${billsHtml({sponsored: data.sponsored})}
     ${donorIndustryHtml(data.donor_industry)}
     ${financialDisclosuresHtml(data.financial_disclosures)}
@@ -1851,39 +1979,7 @@ if (!location.hash && params.get("zip")) {
 loadMeta().catch(showError);
 route();
 
-// Front-page rankings: plain records, no scoring, no party colors.
-function rkTable(rows, chamber) {
-  if (!rows.length) return `<p class="meta">No members with data.</p>`;
-  const money = (n) => n == null ? "—" : "$" + Math.round(n).toLocaleString();
-  const body = rows.map((r) => `<tr><td class="num">${r.rank}</td><td><a href="${esc(r.link)}">${esc(r.name)}</a><span class="rk-cyc">Cycle ${esc(r.cycle || "")}${r.cycle_fallback && chamber === "house" ? "*" : ""}</span></td>
-    <td>${esc(r.party)}-${esc(r.state)}${chamber === "house" && r.district != null ? "-" + esc(String(r.district) === "0" ? "AL" : r.district) : ""}</td>
-    <td class="num">${money(r.dollars)}</td><td class="num">${r.percent == null ? "—" : r.percent.toFixed(1) + "%"}</td>
-    <td class="rk-cycol">${esc(r.cycle || "")}${r.cycle_fallback && chamber === "house" ? "*" : ""}</td></tr>`).join("");
-  return `<div class="rk-scroll"><table><thead><tr><th class="num">#</th><th>Member</th><th>Party-state</th><th class="num">Dollars</th><th class="num">% of receipts</th><th class="rk-cycol">Cycle</th></tr></thead><tbody>${body}</tbody></table></div>`;
-}
-async function loadRankings() {
-  try {
-    const d = await fetch("/api/rankings").then((r) => r.json());
-    const part = (key, label) => {
-      const c = d.chambers[key];
-      const fbNote = key === "house"
-        ? `${c.cycle_fallbacks} use the most recent completed election cycle (marked *) because the current cycle had too little data. `
-        : key === "senate_current"
-          ? `${c.excluded_other_cycle} senators whose donor data comes from their last full campaign are listed in the next section instead. `
-          : `${c.excluded_other_cycle} senators with 2026-cycle donor data are listed in the section above instead. Each row's cycle is its own most recent completed election; cycles are never combined within a row. `;
-      return `<h3 class="section-label">${label}: top ${c.limit}</h3>
-      <div class="rk-pair">
-        <div><h4>Most money from donors whose employers lobbied on their bills</h4>${rkTable(c.by_dollars, key)}</div>
-        <div><h4>Highest share of money raised from donors whose employers lobbied on their bills</h4>${rkTable(c.by_percent, key)}</div>
-      </div>
-      <p class="fine">Coverage: ${c.with_data} of ${c.members_total} current members are ranked here. ${c.excluded_no_data} with no cached donor-industry data are left out. ${fbNote}${c.with_percent} have total receipts for the same cycle; ${c.excluded_from_percent} without them are left out of the percent list.</p>`;
-    };
-    $("rk-status").textContent = d.caption;
-    $("rk-body").innerHTML = part("house", "U.S. House") + part("senate_current", "U.S. Senate, this cycle (2026)") + part("senate_completed", "U.S. Senate, last full campaign (2020, 2022 or 2024)") +
-      `<p class="fine">${esc(d.method)} ${esc(d.percent_method)} Click a name for that member's records. Caches: lobbying ${esc(d.cache.lobbying || "?")}, donor industries ${esc(d.cache.donor_industry || "?")}, finance ${esc(d.cache.finance || "?")}.</p>`;
-  } catch (e) { $("rk-status").textContent = "Rankings could not be loaded."; }
-}
-loadRankings();
+// Front-page member rankings were removed Nov 16, 2026 (neutrality review): members are not ranked against each other.
 </script>
 </body>
 </html>
